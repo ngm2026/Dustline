@@ -107,9 +107,23 @@ function botUpdate(b,dt){if(!b.alive)return;const setting=stats[difficulty];let 
  b.time+=dt;b.turnAt-=dt;if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
  let vx=0,vz=0;if(distance>6){vx+=dirX;vz+=dirZ}else if(distance<3.1){vx-=dirX*.75;vz-=dirZ*.75}
  vx+=-dirZ*b.strafe*(los?.50:.18);vz+=dirX*b.strafe*(los?.50:.18);let mag=Math.hypot(vx,vz);b.moving=mag>.13;
- if(b.moving){vx/=mag;vz/=mag;tryMove(b,vx*dt*setting.speed,vz*dt*setting.speed,b.r)}b.holder.position.set(b.x,0,b.z);
- // Mixamo mesh faces forward by default; rotate toward the player.
- const targetAngle=Math.atan2(dirX,dirZ)+Math.PI;let current=b.body.rotation.y;let dd=Math.atan2(Math.sin(targetAngle-current),Math.cos(targetAngle-current));b.body.rotation.y+=dd*Math.min(1,dt*5);
+ // Use the actual ground displacement, not the direction to the player:
+ // bots that strafe east should face east, even while attacking west.
+ const prevX=b.x,prevZ=b.z;
+ if(b.moving){vx/=mag;vz/=mag;tryMove(b,vx*dt*setting.speed,vz*dt*setting.speed,b.r)}
+ const walkedX=b.x-prevX,walkedZ=b.z-prevZ;
+ const walkedDistance=Math.hypot(walkedX,walkedZ);
+ b.moving=walkedDistance>0.0005;
+ b.holder.position.set(b.x,0,b.z);
+ if(b.moving){
+   // Mixamo's forward axis is -Z; the half-turn maps it onto the travel direction.
+   const targetAngle=Math.atan2(walkedX,walkedZ)+Math.PI;
+   const current=b.body.rotation.y;
+   const difference=Math.atan2(Math.sin(targetAngle-current),Math.cos(targetAngle-current));
+   if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
+   else b.body.rotation.y+=difference*Math.min(1,dt*12);
+ }
+ // Keep the last movement heading while stationary.
  if(b.action)b.action.timeScale=b.moving?1:0;if(b.mixer)b.mixer.update(dt);
  b.shootDelay-=dt;if(distance<23&&los&&b.shootDelay<0){b.shootDelay=setting.fireRate*rnd(.78,1.45);if(Math.random()<setting.accuracy){health=Math.max(0,health-setting.damage);damageAlpha=1;recoil=Math.min(1,recoil+.16);if(health===0){endGame(false);return}}}
 }
