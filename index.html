@@ -122,7 +122,7 @@ for(const btn of document.querySelectorAll('[data-level]'))btn.addEventListener(
 async function fetchFBX(url){const response=await fetch(url);if(!response.ok)throw Error("Could not load "+url+" (HTTP "+response.status+")");return await response.arrayBuffer()}
 function buildWorld(){scene=new THREE.Scene();scene.background=new THREE.Color(0x99c4e3);scene.fog=new THREE.Fog(0x99c4e3,25,75);
  camera=new THREE.PerspectiveCamera(78,window.innerWidth/window.innerHeight,.08,110);camera.rotation.order='YXZ';
- renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;$('stage').appendChild(renderer.domElement);
+ renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=false; // Expensive shadow pass disabled for smoother gameplay;$('stage').appendChild(renderer.domElement);
  scene.add(new THREE.HemisphereLight(0xe5f4ff,0x6d694f,2.4));const sun=new THREE.DirectionalLight(0xffe2b2,2.5);sun.position.set(-16,27,-13);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-40;sun.shadow.camera.right=40;sun.shadow.camera.top=40;sun.shadow.camera.bottom=-40;scene.add(sun);
  const floor=new THREE.Mesh(new THREE.PlaneGeometry(56,56),new THREE.MeshStandardMaterial({color:0xb7a689,roughness:1}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);const grid=new THREE.GridHelper(56,28,0x796e58,0x98866c);grid.position.y=.014;scene.add(grid);
  const boxMat=(color)=>new THREE.MeshStandardMaterial({color,roughness:.92,metalness:.05});
@@ -140,6 +140,11 @@ const SHOOT_SECONDS=.38;
 const SHOOT_FRAME_MAX=11;
 const DRAW_SECONDS=1.0;            // Player gets about one second before the enemy can fire.
 const HOLSTER_AFTER_SECONDS=5.0;  // Five uninterrupted seconds with no visual detection.
+// Reused scratch objects avoid thousands of per-second allocations during animations.
+const poseEuler=new THREE.Euler(0,0,0,'XYZ');
+const poseQuaternion=new THREE.Quaternion();
+const shotQuaternion=new THREE.Quaternion();
+const inverseQuaternion=new THREE.Quaternion();
 const DRAW_SAMPLE_COUNT=11;
 const DRAW_FRAME_MAX=DRAW_SAMPLE_COUNT-1;
 const TO_RAD=Math.PI/1800;
@@ -178,61 +183,68 @@ function advanceEnemyWeaponState(b,canSee,dt){
   b.shootAnim=Math.max(0,b.shootAnim-dt);
 }
 function animateEnemyWeapon(b,dt){
-  // Undo the prior additive pose before updating the original walking cycle.
-  for(const [name,q] of Object.entries(b.previousDrawQuats)){
-    const bone=b.poseBones[name];if(bone)bone.quaternion.multiply(q.clone().invert());
-  }
-  b.previousDrawQuats={};
-  if(b.action)b.action.timeScale=b.moving?1:0;
-  if(b.mixer)b.mixer.update(dt);
-  // The sampled Euler offsets below originate from the user's real
-  // Drawing Gun.fbx, not a guessed arm-raising motion.
-  const index=Math.min(DRAW_FRAME_MAX-1,Math.floor(b.drawProgress*DRAW_FRAME_MAX));
-  const t=b.drawProgress*DRAW_FRAME_MAX-index;
-  for(const [name,bone] of Object.entries(b.poseBones)){
-    const frames=DRAW_POSE_DELTAS[name];if(!frames)continue;
-    const a=frames[index],c=frames[index+1];
-    const euler=new THREE.Euler(
-      (a[0]+(c[0]-a[0])*t)*TO_RAD,
-      (a[1]+(c[1]-a[1])*t)*TO_RAD,
-      (a[2]+(c[2]-a[2])*t)*TO_RAD,
-      'XYZ'
-    );
-    const q=new THREE.Quaternion().setFromEuler(euler);
-    // Actual recoil sample from the uploaded Shooting.fbx, layered on the drawn pose.
-    const shotFrames=SHOOT_POSE_DELTAS[name];
-    if(shotFrames&&b.shootAnim>0){
-      const shotTime=clamp(1-b.shootAnim/SHOOT_SECONDS,0,1)*SHOOT_FRAME_MAX;
-      const shotIndex=Math.min(SHOOT_FRAME_MAX-1,Math.floor(shotTime));
-      const mix=shotTime-shotIndex;
-      const a2=shotFrames[shotIndex],b2=shotFrames[shotIndex+1];
-      const q2=new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        (a2[0]+(b2[0]-a2[0])*mix)*TO_RAD,
-        (a2[1]+(b2[1]-a2[1])*mix)*TO_RAD,
-        (a2[2]+(b2[2]-a2[2])*mix)*TO_RAD,'XYZ'));
-      q.multiply(q2);
-    }
-    bone.quaternion.multiply(q);
-    b.previousDrawQuats[name]=q;
-  }
-  // Follow the animated right hand; when the model has no skeleton, fall back
-  // to a position beside the torso.
-  b.rig.updateMatrixWorld(true);
-  if(b.rightHand){
-    b.rightHand.getWorldPosition(b.propGun.position);
-    b.propGun.position.y-=.04;
-  }else{
-    const a=b.body.rotation.y;
-    b.propGun.position.set(
-      b.x+Math.cos(a)*.38+Math.sin(a)*.40,
-      1.25,
-      b.z-Math.sin(a)*.38+Math.cos(a)*.40
-    );
-  }
-  b.propGun.rotation.set(0,b.body.rotation.y,0);
-  if(b.shootAnim>0)b.propGun.position.y+=Math.sin(Math.PI*b.shootAnim/SHOOT_SECONDS)*.035;
-  b.propGun.visible=b.drawProgress>.24;
-  b.propGun.userData.muzzleFlash.visible=b.shootAnim>SHOOT_SECONDS-.07&&b.propGun.visible;
+ // Reuse preallocated quaternions instead of constructing temporary quaternions
+ // and Euler objects for every bone, on every enemy, on every frame.
+ for(const [name,bone] of b.poseEntries){
+   bone.quaternion.multiply(inverseQuaternion.copy(b.previousDrawQuats[name]).invert());
+ }
+ if(b.action)b.action.timeScale=b.moving?1:0;
+ if(b.mixer)b.mixer.update(dt);
+
+ const hasDrawPose=b.drawProgress>0;
+ const hasRecoil=b.shootAnim>0;
+ if(hasDrawPose||hasRecoil){
+   const drawTime=b.drawProgress*DRAW_FRAME_MAX;
+   const index=Math.min(DRAW_FRAME_MAX-1,Math.floor(drawTime));
+   const t=drawTime-index;
+   const shotTime=hasRecoil?clamp(1-b.shootAnim/SHOOT_SECONDS,0,1)*SHOOT_FRAME_MAX:0;
+   const shotIndex=Math.min(SHOOT_FRAME_MAX-1,Math.floor(shotTime));
+   const shotMix=shotTime-shotIndex;
+   for(const [name,bone] of b.poseEntries){
+     const frames=DRAW_POSE_DELTAS[name];
+     const a=frames[index],c=frames[index+1];
+     poseEuler.set(
+       (a[0]+(c[0]-a[0])*t)*TO_RAD,
+       (a[1]+(c[1]-a[1])*t)*TO_RAD,
+       (a[2]+(c[2]-a[2])*t)*TO_RAD,'XYZ'
+     );
+     poseQuaternion.setFromEuler(poseEuler);
+     if(hasRecoil&&SHOOT_POSE_DELTAS[name]){
+       const shots=SHOOT_POSE_DELTAS[name];
+       const u=shots[shotIndex],v=shots[shotIndex+1];
+       poseEuler.set(
+         (u[0]+(v[0]-u[0])*shotMix)*TO_RAD,
+         (u[1]+(v[1]-u[1])*shotMix)*TO_RAD,
+         (u[2]+(v[2]-u[2])*shotMix)*TO_RAD,'XYZ'
+       );
+       shotQuaternion.setFromEuler(poseEuler);
+       poseQuaternion.multiply(shotQuaternion);
+     }
+     bone.quaternion.multiply(poseQuaternion);
+     b.previousDrawQuats[name].copy(poseQuaternion);
+   }
+ }else{
+   for(const [name] of b.poseEntries)b.previousDrawQuats[name].identity();
+ }
+
+ // Do not calculate joint world positions when the gun is holstered.
+ b.propGun.visible=b.drawProgress>.24;
+ if(!b.propGun.visible)return;
+ if(b.rightHand){
+   // getWorldPosition updates the necessary bone ancestors automatically.
+   b.rightHand.getWorldPosition(b.propGun.position);
+   b.propGun.position.y-=.04;
+ }else{
+   const a=b.body.rotation.y;
+   b.propGun.position.set(
+     b.x+Math.cos(a)*.38+Math.sin(a)*.40,
+     1.25,
+     b.z-Math.sin(a)*.38+Math.cos(a)*.40
+   );
+ }
+ b.propGun.rotation.set(0,b.body.rotation.y,0);
+ if(hasRecoil)b.propGun.position.y+=Math.sin(Math.PI*b.shootAnim/SHOOT_SECONDS)*.035;
+ b.propGun.userData.muzzleFlash.visible=b.shootAnim>SHOOT_SECONDS-.07;
 }
 
 function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THREE.Group();holder.position.set(x,0,z);scene.add(holder);
@@ -242,11 +254,11 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  if(!Number.isFinite(height)||height<.00001)height=170;const factor=1.92/height;rig.scale.multiplyScalar(factor);rig.updateMatrixWorld(true);bb=new THREE.Box3().setFromObject(rig);rig.position.y-=bb.min.y;
  // Put the model's origin at its horizontal center; otherwise Mixamo meshes can be offset.
  rig.position.x-=(bb.min.x+bb.max.x)*.5;rig.position.z-=(bb.min.z+bb.max.z)*.5;
- rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
+ rig.traverse(child=>{if(child.isMesh){child.castShadow=false;child.receiveShadow=false;child.frustumCulled=true;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
   weaponState:'holstered',shootAnim:0,poseBones:{},previousDrawQuats:{},
-  rightHand:null,propGun:makeEnemyGun()};hit.userData.bot=bot;
+  rightHand:null,propGun:makeEnemyGun(),poseEntries:[],visionTimer:rnd(0,.1),clearSight:false};hit.userData.bot=bot;
  rig.traverse(child=>{
    if(!child.isBone)return;
    for(const key of Object.keys(DRAW_POSE_DELTAS)){
@@ -255,7 +267,10 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
      }
    }
  });
- bot.rightHand=bot.poseBones.RightHand||null;hit.name='DUSTLINE_ENEMY_HITBOX';
+ bot.rightHand=bot.poseBones.RightHand||null;
+ bot.poseEntries=Object.entries(bot.poseBones);
+ for(const [name] of bot.poseEntries)bot.previousDrawQuats[name]=new THREE.Quaternion();
+ hit.name='DUSTLINE_ENEMY_HITBOX';
  if(walkingClip){bot.mixer=new THREE.AnimationMixer(rig);const act=bot.mixer.clipAction(walkingClip);act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;bot.mixer.update(rnd(0,1.5))}enemies.push(bot);
 }
 function spawn(){for(const b of enemies){scene.remove(b.holder);scene.remove(b.propGun);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
@@ -304,7 +319,9 @@ function botUpdate(b,dt){
  const dx=PLAYER.x-b.x,dz=PLAYER.z-b.z;
  const distance=Math.hypot(dx,dz)||1;
  const dirX=dx/distance,dirZ=dz/distance;
- const los=lineOfSight(b);
+ b.visionTimer-=dt;
+ if(b.visionTimer<=0){b.clearSight=lineOfSight(b);b.visionTimer=.12;}
+ const los=b.clearSight;
  b.time+=dt;b.turnAt-=dt;
  if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
  let vx=0,vz=0;
@@ -357,6 +374,7 @@ function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(e
  if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);scene.remove(bot.propGun);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
 }
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
+let hudTimer=0;
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
  if(mood==='playing'){elapsed+=dt;updateReload();let aiming=rightHeld;aimAmount+=(Number(aiming)-aimAmount)*Math.min(1,dt*10);camera.fov=baseFov*(1-.40*aimAmount);camera.updateProjectionMatrix();$('reticle').classList.toggle('aim',aimAmount>.42);
  // Turn first, then move along the camera's horizontal facing direction.
@@ -373,7 +391,9 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
    tryMove(PLAYER,(forwardX*forward+rightX*side)*speed*dt,(forwardZ*forward+rightZ*side)*speed*dt,PLAYER.r);
  }
  vY-=19.5*dt;eyeY+=vY*dt;if(eyeY<1.65){eyeY=1.65;vY=0}camera.position.set(PLAYER.x,eyeY,PLAYER.z);camera.rotation.set(pitch,yaw,0,'YXZ');
- for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
+ for(const b of enemies)botUpdate(b,dt);
+ hudTimer-=dt;if(hudTimer<=0){hudTimer=.15;updateHUD()}
+ if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
 const stage=$('stage');
 addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){
