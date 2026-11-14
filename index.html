@@ -183,7 +183,7 @@ function actionOnlyUpperBody(clip){
  const copy=clip.clone();
  // No root motion, hip/leg transforms, or mesh animation. Walking owns the legs.
  copy.tracks=copy.tracks.filter(t=>
-   /\\.quaternion$/i.test(t.name)&&
+   /\.quaternion$/i.test(t.name)&&
    /(?:Spine|Neck|Head|Shoulder|Arm|ForeArm|Hand)/i.test(t.name)
  );
  return copy.tracks.length>0?copy:null;
