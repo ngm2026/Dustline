@@ -58,10 +58,9 @@ window.__dustlineModuleLoaded=true;
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
-import {DRAW_POSE_DELTAS} from './assets/animations/draw_pose_data.js';
-import {SHOOT_POSE_DELTAS} from './assets/animations/shoot_pose_data.js';
+
 const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
-let scene,camera,renderer,template,walkingClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
+let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
@@ -136,103 +135,71 @@ function buildWorld(){scene=new THREE.Scene();scene.background=new THREE.Color(0
 function collide(x,z,r){return Math.abs(x)>25.4-r||Math.abs(z)>25.4-r||solid.some(b=>x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ)}
 function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collide(obj.x,obj.z+dz,r))obj.z+=dz}
 
+// Real FBX animations are applied to the existing character skeleton.
+// No fake gun or extra character model is created.
 const SHOOT_SECONDS=.38;
-const SHOOT_FRAME_MAX=11;
-const DRAW_SECONDS=1.0;            // Player gets about one second before the enemy can fire.
-const HOLSTER_AFTER_SECONDS=5.0;  // Five uninterrupted seconds with no visual detection.
-const DRAW_SAMPLE_COUNT=11;
-const DRAW_FRAME_MAX=DRAW_SAMPLE_COUNT-1;
-const TO_RAD=Math.PI/1800;
-function makeEnemyGun(){
-  // Lightweight visible pistol: kept separate from the character mesh so it
-  // can be hidden when holstered. The user's character textures remain intact.
-  const g=new THREE.Group();
-  const metal=new THREE.MeshStandardMaterial({color:0x252a30,metalness:.55,roughness:.42});
-  const grip=new THREE.MeshStandardMaterial({color:0x111418,roughness:.93});
-  function part(w,h,d,x,y,z,mat){
-    const box=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
-    box.position.set(x,y,z);box.castShadow=true;g.add(box);
-  }
-  part(.095,.085,.27,0,0,.07,metal);         // Slide/barrel points along character +Z.
-  part(.072,.14,.077,0,-.105,-.003,grip);    // Handle.
-  part(.02,.04,.055,0,-.052,.06,grip);       // Trigger guard.
-  const flare=new THREE.Mesh(new THREE.SphereGeometry(.067,7,5),new THREE.MeshBasicMaterial({color:0xffd783}));
-  flare.position.z=.225;flare.visible=false;g.add(flare);
-  g.userData.muzzleFlash=flare;
-  g.visible=false;scene.add(g);return g;
-}
+const DRAW_SECONDS=1.0;
+const HOLSTER_AFTER_SECONDS=5.0;
 function advanceEnemyWeaponState(b,canSee,dt){
-  if(canSee){
-    b.unseenFor=0;
-    if(b.drawProgress<1){
-      b.drawProgress=Math.min(1,b.drawProgress+dt/DRAW_SECONDS);
-      b.weaponState=b.drawProgress>=1?'armed':'drawing';
-    }else b.weaponState='armed';
-  }else{
-    b.unseenFor+=dt;
-    if(b.unseenFor>=HOLSTER_AFTER_SECONDS){
-      b.drawProgress=Math.max(0,b.drawProgress-dt/DRAW_SECONDS);
-      b.weaponState=b.drawProgress>0?'holstering':'holstered';
-    }
-  }
-  b.shootAnim=Math.max(0,b.shootAnim-dt);
+ if(canSee){
+   b.unseenFor=0;
+   if(b.drawProgress<1){
+     b.drawProgress=Math.min(1,b.drawProgress+dt/DRAW_SECONDS);
+     b.weaponState=b.drawProgress>=1?'armed':'drawing';
+   }else b.weaponState='armed';
+ }else{
+   b.unseenFor+=dt;
+   if(b.unseenFor>=HOLSTER_AFTER_SECONDS){
+     b.drawProgress=Math.max(0,b.drawProgress-dt/DRAW_SECONDS);
+     b.weaponState=b.drawProgress>0?'holstering':'holstered';
+   }
+ }
+ b.shootAnim=Math.max(0,b.shootAnim-dt);
 }
 function animateEnemyWeapon(b,dt){
-  // Undo the prior additive pose before updating the original walking cycle.
-  for(const [name,q] of Object.entries(b.previousDrawQuats)){
-    const bone=b.poseBones[name];if(bone)bone.quaternion.multiply(q.clone().invert());
-  }
-  b.previousDrawQuats={};
-  if(b.action)b.action.timeScale=b.moving?1:0;
-  if(b.mixer)b.mixer.update(dt);
-  // The sampled Euler offsets below originate from the user's real
-  // Drawing Gun.fbx, not a guessed arm-raising motion.
-  const index=Math.min(DRAW_FRAME_MAX-1,Math.floor(b.drawProgress*DRAW_FRAME_MAX));
-  const t=b.drawProgress*DRAW_FRAME_MAX-index;
-  for(const [name,bone] of Object.entries(b.poseBones)){
-    const frames=DRAW_POSE_DELTAS[name];if(!frames)continue;
-    const a=frames[index],c=frames[index+1];
-    const euler=new THREE.Euler(
-      (a[0]+(c[0]-a[0])*t)*TO_RAD,
-      (a[1]+(c[1]-a[1])*t)*TO_RAD,
-      (a[2]+(c[2]-a[2])*t)*TO_RAD,
-      'XYZ'
-    );
-    const q=new THREE.Quaternion().setFromEuler(euler);
-    // Actual recoil sample from the uploaded Shooting.fbx, layered on the drawn pose.
-    const shotFrames=SHOOT_POSE_DELTAS[name];
-    if(shotFrames&&b.shootAnim>0){
-      const shotTime=clamp(1-b.shootAnim/SHOOT_SECONDS,0,1)*SHOOT_FRAME_MAX;
-      const shotIndex=Math.min(SHOOT_FRAME_MAX-1,Math.floor(shotTime));
-      const mix=shotTime-shotIndex;
-      const a2=shotFrames[shotIndex],b2=shotFrames[shotIndex+1];
-      const q2=new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        (a2[0]+(b2[0]-a2[0])*mix)*TO_RAD,
-        (a2[1]+(b2[1]-a2[1])*mix)*TO_RAD,
-        (a2[2]+(b2[2]-a2[2])*mix)*TO_RAD,'XYZ'));
-      q.multiply(q2);
-    }
-    bone.quaternion.multiply(q);
-    b.previousDrawQuats[name]=q;
-  }
-  // Follow the animated right hand; when the model has no skeleton, fall back
-  // to a position beside the torso.
-  b.rig.updateMatrixWorld(true);
-  if(b.rightHand){
-    b.rightHand.getWorldPosition(b.propGun.position);
-    b.propGun.position.y-=.04;
-  }else{
-    const a=b.body.rotation.y;
-    b.propGun.position.set(
-      b.x+Math.cos(a)*.38+Math.sin(a)*.40,
-      1.25,
-      b.z-Math.sin(a)*.38+Math.cos(a)*.40
-    );
-  }
-  b.propGun.rotation.set(0,b.body.rotation.y,0);
-  if(b.shootAnim>0)b.propGun.position.y+=Math.sin(Math.PI*b.shootAnim/SHOOT_SECONDS)*.035;
-  b.propGun.visible=b.drawProgress>.24;
-  b.propGun.userData.muzzleFlash.visible=b.shootAnim>SHOOT_SECONDS-.07&&b.propGun.visible;
+ // Advance walking normally (including when the enemy is unarmed).
+ if(b.action)b.action.timeScale=b.moving?1:0;
+ if(b.mixer)b.mixer.update(dt);
+ if(!b.weaponMixer)return;
+ // If the enemy is holstered, leave the walking skeleton alone.
+ if(b.drawProgress<=0&&b.shootAnim<=0)return;
+ let active=null,progress=0;
+ if(b.shootAnim>0&&b.shootAction){
+   active=b.shootAction;
+   progress=1-b.shootAnim/SHOOT_SECONDS;
+ }else if(b.drawProgress>0&&b.drawAction){
+   active=b.drawAction;
+   progress=b.drawProgress;  // The same clip reversed when holstering.
+ }
+ if(!active)return;
+ if(b.drawAction)b.drawAction.setEffectiveWeight(active===b.drawAction?1:0);
+ if(b.shootAction)b.shootAction.setEffectiveWeight(active===b.shootAction?1:0);
+ active.time=Math.min(Math.max(0,active.getClip().duration-.001),Math.max(0,progress)*active.getClip().duration);
+ // Frozen action time is intentional; AI sets the exact animation frame.
+ b.weaponMixer.update(0);
+}
+function actionOnlyUpperBody(clip){
+ if(!clip)return null;
+ const copy=clip.clone();
+ // No root motion, hip/leg transforms, or mesh animation. Walking owns the legs.
+ copy.tracks=copy.tracks.filter(t=>
+   /\\.quaternion$/i.test(t.name)&&
+   /(?:Spine|Neck|Head|Shoulder|Arm|ForeArm|Hand)/i.test(t.name)
+ );
+ return copy.tracks.length>0?copy:null;
+}
+async function loadEnemyActionFBX(loader,url,label){
+ try{
+   const bytes=await fetchFBX(url);
+   const imported=loader.parse(bytes,'');
+   const clip=actionOnlyUpperBody((imported.animations||[]).find(c=>c.tracks.length>0));
+   if(!clip)throw Error('No compatible upper-body tracks');
+   console.info('DUSTLINE',label,clip.tracks.length,'animation tracks loaded from FBX');
+   return clip;
+ }catch(err){
+   console.warn('DUSTLINE',label,'animation unavailable; enemy remains playable:',err);
+   return null;
+ }
 }
 
 function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THREE.Group();holder.position.set(x,0,z);scene.add(holder);
@@ -244,21 +211,36 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  rig.position.x-=(bb.min.x+bb.max.x)*.5;rig.position.z-=(bb.min.z+bb.max.z)*.5;
  rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
- const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
-  weaponState:'holstered',shootAnim:0,poseBones:{},previousDrawQuats:{},
-  rightHand:null,propGun:makeEnemyGun()};hit.userData.bot=bot;
- rig.traverse(child=>{
-   if(!child.isBone)return;
-   for(const key of Object.keys(DRAW_POSE_DELTAS)){
-     if(child.name.toLowerCase().endsWith(key.toLowerCase())){
-       bot.poseBones[key]=child;break;
-     }
+ const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,
+  mixer:null,weaponMixer:null,drawAction:null,shootAction:null,
+  shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
+  moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
+  weaponState:'holstered',shootAnim:0
+ };hit.userData.bot=bot;hit.name='DUSTLINE_ENEMY_HITBOX';
+ if(walkingClip){
+   bot.mixer=new THREE.AnimationMixer(rig);
+   const act=bot.mixer.clipAction(walkingClip);
+   act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;
+   bot.mixer.update(rnd(0,1.5));
+ }
+ if(drawClip||shootClip){
+   bot.weaponMixer=new THREE.AnimationMixer(rig);
+   if(drawClip){
+     bot.drawAction=bot.weaponMixer.clipAction(drawClip);
+     bot.drawAction.setLoop(THREE.LoopRepeat);
+     bot.drawAction.paused=true;
+     bot.drawAction.play();
    }
- });
- bot.rightHand=bot.poseBones.RightHand||null;hit.name='DUSTLINE_ENEMY_HITBOX';
- if(walkingClip){bot.mixer=new THREE.AnimationMixer(rig);const act=bot.mixer.clipAction(walkingClip);act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;bot.mixer.update(rnd(0,1.5))}enemies.push(bot);
+   if(shootClip){
+     bot.shootAction=bot.weaponMixer.clipAction(shootClip);
+     bot.shootAction.setLoop(THREE.LoopRepeat);
+     bot.shootAction.paused=true;
+     bot.shootAction.play();
+   }
+ }
+ enemies.push(bot);
 }
-function spawn(){for(const b of enemies){scene.remove(b.holder);scene.remove(b.propGun);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
+function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mixer.stopAllAction();if(b.weaponMixer)b.weaponMixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
@@ -331,7 +313,7 @@ function botUpdate(b,dt){
  const facingDot=forwardX*towardX+forwardZ*towardZ;
  const canSee=distance<23&&los&&facingDot>=Math.cos(75*Math.PI/180);
  advanceEnemyWeaponState(b,canSee,dt);
- // The animation files are already imported; never let a broken pose update
+ // Animation FBX clips are optional; never let a broken pose update
  // interrupt the game loop or repeatedly throw on every frame.
  if(!b.animationFailed){
    try{
@@ -339,7 +321,6 @@ function botUpdate(b,dt){
    }catch(err){
      b.animationFailed=true;
      console.error('DUSTLINE: disabling enemy animation after error',b.id,err);
-     b.propGun.visible=b.drawProgress>.24;
      if(b.action)b.action.timeScale=b.moving?1:0;
      say('ENEMY ANIMATION ERROR — WALKING FALLBACK ACTIVE',3);
    }
@@ -353,7 +334,7 @@ function botUpdate(b,dt){
  b.shootDelay-=dt;
  if(canFire&&b.shootDelay<0){
    b.shootDelay=setting.fireRate*rnd(.78,1.45);
-   b.shootAnim=SHOOT_SECONDS; // Recoil from the supplied Shooting.fbx.
+   b.shootAnim=SHOOT_SECONDS; // Play the real shooting animation on the character.
    if(Math.random()<setting.accuracy){
      if(!infiniteHealth){
        health=Math.max(0,health-setting.damage);
@@ -369,7 +350,7 @@ function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(e
  const targets=[...casts,...enemies.filter(b=>b.alive).map(b=>b.hit)];const intersects=ray.intersectObjects(targets,false);
  if(intersects.length){const object=intersects[0].object;const bot=object.userData.bot;
  if(bot&&bot.alive){bot.hp-=w.damage;$('hitmark').style.opacity=1;hitTimer=.14;
- if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);scene.remove(bot.propGun);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
+ if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
 }
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
@@ -437,7 +418,19 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  if(!match)throw Error('Could not match animation bone tracks to the character');
  // Keep the feet walking in place while AI drives the real enemy position.
  for(const tr of walkingClip.tracks){if(/Hips\.position$/i.test(tr.name)&&tr.values&&tr.values.length>=3){const x=tr.values[0], z=tr.values[2];for(let i=0;i<tr.values.length;i+=3){tr.values[i]=x;tr.values[i+2]=z}}}
- log('Ready: your character + '+walkingClip.name+' walking clip ('+walkingClip.tracks.length+' tracks)');$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
+ // Load small, animation-only FBXs. Both files must be uploaded to GitHub:
+ // assets/animations/Drawing_Gun_Animation.fbx
+ // assets/animations/Shooting_Animation.fbx
+ log('Loading drawing and shooting animations…');
+ [drawClip,shootClip]=await Promise.all([
+   loadEnemyActionFBX(loader,'assets/animations/Drawing_Gun_Animation.fbx','Draw'),
+   loadEnemyActionFBX(loader,'assets/animations/Shooting_Animation.fbx','Shoot')
+ ]);
+ if(!drawClip||!shootClip){
+   $('status').textContent='One or both weapon animation FBXs are missing. Upload the small FBXs into assets/animations/ to enable draw and shoot animations.';
+ }
+ log('Ready: character, walking, and '+(drawClip?'drawing ':'')+(shootClip?'shooting':'')+' animations.');
+$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
  }catch(e){
  console.warn('DUSTLINE custom assets unavailable; using temporary enemies:',e);
  if(!renderer){$('status').textContent='3D engine could not initialize: '+(e?.message||e);$('play').disabled=true;$('play').textContent='3D ENGINE FAILED';$('loader').style.display='none';return}
