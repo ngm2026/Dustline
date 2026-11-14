@@ -254,7 +254,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  if(!Number.isFinite(height)||height<.00001)height=170;const factor=1.92/height;rig.scale.multiplyScalar(factor);rig.updateMatrixWorld(true);bb=new THREE.Box3().setFromObject(rig);rig.position.y-=bb.min.y;
  // Put the model's origin at its horizontal center; otherwise Mixamo meshes can be offset.
  rig.position.x-=(bb.min.x+bb.max.x)*.5;rig.position.z-=(bb.min.z+bb.max.z)*.5;
- rig.traverse(child=>{if(child.isMesh){child.castShadow=false;child.receiveShadow=false;child.frustumCulled=true;}});
+ rig.traverse(child=>{if(child.isMesh){child.castShadow=false;child.receiveShadow=false;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
   weaponState:'holstered',shootAnim:0,poseBones:{},previousDrawQuats:{},
@@ -434,15 +434,23 @@ document.addEventListener('mousemove',e=>{
 $('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='playing';setPanel(null);requestGameMouse()};$('back').onclick=menu;$('endBack').onclick=menu;
 $('weaponView').style.backgroundImage='url("assets/handgun.png")';
 function log(s){$('status').textContent=s;$('loader').textContent=s}
-async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(frame);const loader=new FBXLoader();log('Parsing your character model…');await new Promise(r=>setTimeout(r,30));const model=loader.parse(await fetchFBX('assets/character.fbx'),'');if(!model){throw Error('character.fbx did not produce a 3D model')}template=model;
- // Explicitly load the animation from the uploaded Walking.fbx, not a generic walk cycle.
- log('Loading walking FBX animation…');await new Promise(r=>setTimeout(r,50));const walk=loader.parse(await fetchFBX('assets/walking.fbx'),'');const clips=walk.animations||[];walkingClip=clips.find(c=>/mixamo\.com/i.test(c.name)&&c.tracks.length>0)||clips.find(c=>c.duration>.1&&c.tracks.length>0);
- if(!walkingClip)throw Error('Walking.fbx contains no usable animation clips');
+async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(frame);const loader=new FBXLoader();
+ // Walking.fbx includes the complete skinned character and its walking clips.
+ // Loading character.fbx as well duplicates roughly 142 MB of FBX data and
+ // all twelve large embedded textures, causing memory pressure and stutter.
+ log('Loading optimized character + walking animation (one FBX)…');
+ await new Promise(r=>setTimeout(r,30));
+ const walk=loader.parse(await fetchFBX('assets/walking.fbx'),'');
+ if(!walk)throw Error('Walking.fbx did not produce a 3D character');
+ template=walk;
+ const clips=walk.animations||[];
+ walkingClip=clips.find(c=>/mixamo\.com/i.test(c.name)&&c.tracks.length>0)||clips.find(c=>c.duration>.1&&c.tracks.length>0);
+ if(!walkingClip)throw Error('Walking.fbx contains no usable walking animation');
  const match=walkingClip.tracks.filter(track=>track.name.includes('mixamorig')).length;
  if(!match)throw Error('Could not match animation bone tracks to the character');
  // Keep the feet walking in place while AI drives the real enemy position.
  for(const tr of walkingClip.tracks){if(/Hips\.position$/i.test(tr.name)&&tr.values&&tr.values.length>=3){const x=tr.values[0], z=tr.values[2];for(let i=0;i<tr.values.length;i+=3){tr.values[i]=x;tr.values[i+2]=z}}}
- log('Ready: your character + '+walkingClip.name+' walking clip ('+walkingClip.tracks.length+' tracks)');$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
+ log('Ready: your character + '+walkingClip.name+' walking clip ('+walkingClip.tracks.length+' tracks)');$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='OPTIMIZED CHARACTER + WALK · '+walkingClip.tracks.length+' TRACKS';
  }catch(e){
  console.warn('DUSTLINE custom assets unavailable; using temporary enemies:',e);
  if(!renderer){$('status').textContent='3D engine could not initialize: '+(e?.message||e);$('play').disabled=true;$('play').textContent='3D ENGINE FAILED';$('loader').style.display='none';return}
