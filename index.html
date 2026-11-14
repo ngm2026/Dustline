@@ -331,7 +331,22 @@ function botUpdate(b,dt){
  const facingDot=forwardX*towardX+forwardZ*towardZ;
  const canSee=distance<23&&los&&facingDot>=Math.cos(75*Math.PI/180);
  advanceEnemyWeaponState(b,canSee,dt);
- animateEnemyWeapon(b,dt);
+ // The animation files are already imported; never let a broken pose update
+ // interrupt the game loop or repeatedly throw on every frame.
+ if(!b.animationFailed){
+   try{
+     animateEnemyWeapon(b,dt);
+   }catch(err){
+     b.animationFailed=true;
+     console.error('DUSTLINE: disabling enemy animation after error',b.id,err);
+     b.propGun.visible=b.drawProgress>.24;
+     if(b.action)b.action.timeScale=b.moving?1:0;
+     say('ENEMY ANIMATION ERROR — WALKING FALLBACK ACTIVE',3);
+   }
+ }else{
+   if(b.action)b.action.timeScale=b.moving?1:0;
+   if(b.mixer)b.mixer.update(dt);
+ }
  // No shots until the full one-second draw has completed. Also retain the
  // tighter shooting cone so an enemy can't fire backward or sideways.
  const canFire=canSee&&facingDot>=Math.cos(55*Math.PI/180)&&b.drawProgress>=.999;
