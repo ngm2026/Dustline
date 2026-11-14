@@ -116,8 +116,8 @@ function botUpdate(b,dt){if(!b.alive)return;const setting=stats[difficulty];let 
  b.moving=walkedDistance>0.0005;
  b.holder.position.set(b.x,0,b.z);
  if(b.moving){
-   // Mixamo's forward axis is -Z; the half-turn maps it onto the travel direction.
-   const targetAngle=Math.atan2(walkedX,walkedZ)+Math.PI;
+   // The imported character's front faces +Z; align that front with actual travel.
+   const targetAngle=Math.atan2(walkedX,walkedZ);
    const current=b.body.rotation.y;
    const difference=Math.atan2(Math.sin(targetAngle-current),Math.cos(targetAngle-current));
    if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
