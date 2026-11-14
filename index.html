@@ -138,9 +138,19 @@ function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapons[gun
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=gun===1?$('weaponView'):$('rifleView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
  if(mood==='playing'){elapsed+=dt;updateReload();let aiming=rightHeld||shootHeld;aimAmount+=(Number(aiming)-aimAmount)*Math.min(1,dt*10);camera.fov=78-31*aimAmount;camera.updateProjectionMatrix();$('reticle').classList.toggle('aim',aimAmount>.42);
- // movement relative to camera heading
- let forward=(keys.KeyW?1:0)-(keys.KeyS?1:0),side=(keys.KeyD?1:0)-(keys.KeyA?1:0);let len=Math.hypot(forward,side);if(len){forward/=len;side/=len;let speed=(keys.ShiftLeft||keys.ShiftRight)?8.4:5.3;if(aiming)speed*=.72;tryMove(PLAYER,(Math.sin(yaw)*forward+Math.cos(yaw)*side)*speed*dt,(-Math.cos(yaw)*forward+Math.sin(yaw)*side)*speed*dt,PLAYER.r)}
+ // Turn first, then move along the camera's horizontal facing direction.
  if(keys.ArrowLeft)yaw+=dt*1.55;if(keys.ArrowRight)yaw-=dt*1.55;if(keys.ArrowUp)pitch+=dt*1.1;if(keys.ArrowDown)pitch-=dt*1.1;pitch=clamp(pitch,-1.25,1.25);
+ let forward=(keys.KeyW?1:0)-(keys.KeyS?1:0),side=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+ const len=Math.hypot(forward,side);
+ if(len){
+   forward/=len;side/=len;
+   let speed=(keys.ShiftLeft||keys.ShiftRight)?8.4:5.3;if(aiming)speed*=.72;
+   // Three.js looks down local -Z, so its yaw's forward X is -sin(yaw).
+   // Right is 90 degrees clockwise from forward in the ground plane.
+   const forwardX=-Math.sin(yaw),forwardZ=-Math.cos(yaw);
+   const rightX=Math.cos(yaw),rightZ=-Math.sin(yaw);
+   tryMove(PLAYER,(forwardX*forward+rightX*side)*speed*dt,(forwardZ*forward+rightZ*side)*speed*dt,PLAYER.r);
+ }
  vY-=19.5*dt;eyeY+=vY*dt;if(eyeY<1.65){eyeY=1.65;vY=0}camera.position.set(PLAYER.x,eyeY,PLAYER.z);camera.rotation.set(pitch,yaw,0,'YXZ');
  for(const b of enemies)botUpdate(b,dt);if(shootHeld&&weapons[gun].automatic)shoot();if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
