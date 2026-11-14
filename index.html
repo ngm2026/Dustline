@@ -31,7 +31,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div id="weaponView"></div><div id="rifleView"></div><div id="flash"></div>
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
 <div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">30</span><strong id="reserve"> / 120</strong></div><label id="gunName">AK-47</label></div></div><div id="tips">WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT + ZOOM · RIGHT CLICK ZOOM<br/>1/2 SWAP · R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
-<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot and zoom · Right-click to zoom only · Space to jump · 1/2 to switch weapons. Requires internet to load Three.js, but model files are embedded in the download.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
+<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot and zoom · Right-click to zoom only · Space to jump · 1/2 to switch weapons. Requires internet to load Three.js. Upload the FBX and PNG files to GitHub's assets folder to use your artwork.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
 
 
 <script>
@@ -47,6 +47,17 @@ const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.
 let scene,camera,renderer,template,walkingClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,gun=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const PLAYER={x:0,z:15,r:0.52};const keys={};const stats={easy:{speed:1.35,damage:4,fireRate:2.4,accuracy:.4},normal:{speed:2.05,damage:7,fireRate:1.6,accuracy:.66},hard:{speed:2.8,damage:11,fireRate:1.05,accuracy:.9}};
 const weapons=[{name:'AK-47',max:30,mag:30,stock:150,rate:.105,damage:29,spread:.023,automatic:true},{name:'HANDGUN',max:15,mag:15,stock:75,rate:.25,damage:43,spread:.010,automatic:false}];
+function makePlaceholderEnemy(){
+ const root=new THREE.Group();
+ const outfit=new THREE.MeshStandardMaterial({color:0x9d644c,roughness:1});
+ const dark=new THREE.MeshStandardMaterial({color:0x283d48,roughness:1});
+ const face=new THREE.MeshStandardMaterial({color:0xdcb493,roughness:1});
+ function part(w,h,d,x,y,z,material){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);root.add(m)}
+ part(.62,.77,.35,0,1.27,0,outfit);part(.39,.39,.37,0,1.86,0,face);
+ part(.23,.75,.27,-.46,1.23,0,outfit);part(.23,.75,.27,.46,1.23,0,outfit);
+ part(.26,.78,.29,-.17,.44,0,dark);part(.26,.78,.29,.17,.44,0,dark);
+ return root;
+}
 const ray=new THREE.Raycaster();ray.far=95;const UP=new THREE.Vector3(0,1,0);const rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),v3=new THREE.Vector3();
 function say(str,secs=2){$('message').textContent=str;$('message').style.opacity=1;toastTimer=secs}
 function setPanel(which){$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which||gun!==1?'none':'block';$('rifleView').style.display=which||gun!==0?'none':'block'}
@@ -83,9 +94,9 @@ function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mix
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=Math.max(0,Math.ceil(health));$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapons[gun].mag;$('reserve').textContent=' / '+weapons[gun].stock;$('gunName').textContent=weapons[gun].name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
-function start(){if(!template||!walkingClip){$('status').textContent='Models are not ready yet. Check loading status.';return}
+function start(){if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
  mood='playing';elapsed=0;kills=0;health=100;gun=0;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;for(let w of weapons){w.mag=w.max;w.stock=w.name==='AK-47'?150:75}spawn();setPanel(null);updateHUD();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
-function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five of your custom enemy models were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
+function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
 function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause')}
 function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu')}
 function swap(i){if(gun===i)return;gun=i;recoil=0;shootHeld=false;setPanel(null);updateHUD()}
@@ -134,7 +145,15 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  // Keep the feet walking in place while AI drives the real enemy position.
  for(const tr of walkingClip.tracks){if(/Hips\.position$/i.test(tr.name)&&tr.values&&tr.values.length>=3){const x=tr.values[0], z=tr.values[2];for(let i=0;i<tr.values.length;i+=3){tr.values[i]=x;tr.values[i+2]=z}}}
  log('Ready: your character + '+walkingClip.name+' walking clip ('+walkingClip.tracks.length+' tracks)');$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
- }catch(e){console.error(e);$('status').textContent='Could not load your FBX assets: '+(e?.message||e)+'. Try opening in Chrome with internet access.';$('play').disabled=true;$('play').textContent='MODEL LOADING FAILED';$('loader').style.display='none'}}
+ }catch(e){
+ console.warn('DUSTLINE custom assets unavailable; using temporary enemies:',e);
+ if(!renderer){$('status').textContent='3D engine could not initialize: '+(e?.message||e);$('play').disabled=true;$('play').textContent='3D ENGINE FAILED';$('loader').style.display='none';return}
+ if(!template)template=makePlaceholderEnemy();
+ walkingClip=null;
+ $('status').textContent='Temporary enemies ready. Your FBX files are missing or invalid. Upload assets/character.fbx and assets/walking.fbx to GitHub to show your real models. ('+(e?.message||e)+')';
+ $('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';
+ $('assetBadge').textContent='TEMPORARY ENEMY MODELS · FBX NOT LOADED';
+}}
 init();
 </script>
 </body></html>
