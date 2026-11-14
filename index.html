@@ -6,7 +6,7 @@
 <style>
 :root{--ink:#07131d;--cream:#edf3f2;--accent:#e6ad5e;--cyan:#6fd9e4;--sub:#b2c6ce}
 *{box-sizing:border-box}body,html{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,Segoe UI,Arial,sans-serif;background:#172935;color:var(--cream)}
-button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab5d2}#stage canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab5d2}#stage canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}body.in-game,body.in-game *{cursor:none!important}
 #vignette{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 145px #061a2588;z-index:2}
 #hud{pointer-events:none;position:fixed;inset:0;z-index:4;display:none}#topbar{position:absolute;left:24px;right:24px;top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
 .brand{letter-spacing:.19em;font-weight:1000;font-size:20px;text-shadow:0 2px 8px #1239}.brand span{color:var(--accent)}.micro{font-size:10px;letter-spacing:.15em;color:#def4fa;font-weight:800;text-shadow:0 2px 6px #143b}.stat{display:inline-flex;flex-direction:column;align-items:end;gap:2px;margin-left:18px}.stat b{font-size:22px;text-shadow:0 2px 10px #102939}.stat small{font-size:9px;letter-spacing:.14em;color:#d6e4e6;font-weight:800}
@@ -60,7 +60,7 @@ function makePlaceholderEnemy(){
 }
 const ray=new THREE.Raycaster();ray.far=95;const UP=new THREE.Vector3(0,1,0);const rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),v3=new THREE.Vector3();
 function say(str,secs=2){$('message').textContent=str;$('message').style.opacity=1;toastTimer=secs}
-function setPanel(which){$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which||gun!==1?'none':'block';$('rifleView').style.display=which||gun!==0?'none':'block'}
+function setPanel(which){document.body.classList.toggle('in-game',!which);$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which||gun!==1?'none':'block';$('rifleView').style.display=which||gun!==0?'none':'block'}
 for(const btn of document.querySelectorAll('[data-level]'))btn.addEventListener('click',()=>{difficulty=btn.dataset.level;document.querySelectorAll('[data-level]').forEach(el=>el.classList.toggle('active',el===btn))});
 async function fetchFBX(url){const response=await fetch(url);if(!response.ok)throw Error("Could not load "+url+" (HTTP "+response.status+")");return await response.arrayBuffer()}
 function buildWorld(){scene=new THREE.Scene();scene.background=new THREE.Color(0x99c4e3);scene.fog=new THREE.Fog(0x99c4e3,25,75);
@@ -94,11 +94,39 @@ function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mix
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=Math.max(0,Math.ceil(health));$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapons[gun].mag;$('reserve').textContent=' / '+weapons[gun].stock;$('gunName').textContent=weapons[gun].name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
+function requestGameMouse(){
+ if(!renderer?.domElement||document.pointerLockElement===renderer.domElement)return;
+ try{
+   const result=renderer.domElement.requestPointerLock?.();
+   if(result?.catch)result.catch(()=>{
+     if(mood==='playing'&&!mouseLockWarningShown){
+       mouseLockWarningShown=true;
+       say('MOUSE CAPTURE BLOCKED · OPEN GAME IN A NORMAL BROWSER TAB',4);
+     }
+   });
+ }catch(e){
+   if(mood==='playing'&&!mouseLockWarningShown){
+     mouseLockWarningShown=true;
+     say('MOUSE CAPTURE BLOCKED · OPEN GAME IN A NORMAL BROWSER TAB',4);
+   }
+ }
+}
+let mouseLockWarningShown=false;
+function releaseGameMouse(){
+ if(document.pointerLockElement===renderer?.domElement)document.exitPointerLock?.();
+}
+document.addEventListener('pointerlockchange',()=>{
+ const locked=document.pointerLockElement===renderer?.domElement;
+ mousePrev=null;
+ if(!locked&&mood==='playing'&&hadMouseLock)pause();
+ hadMouseLock=locked;
+});
+let hadMouseLock=false;
 function start(){if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
- mood='playing';elapsed=0;kills=0;health=100;gun=0;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;for(let w of weapons){w.mag=w.max;w.stock=w.name==='AK-47'?150:75}spawn();setPanel(null);updateHUD();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
-function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
-function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause')}
-function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu')}
+ mood='playing';elapsed=0;kills=0;health=100;gun=0;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;for(let w of weapons){w.mag=w.max;w.stock=w.name==='AK-47'?150:75}spawn();setPanel(null);updateHUD();requestGameMouse();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
+function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
+function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause');releaseGameMouse()}
+function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
 function swap(i){if(gun===i)return;gun=i;recoil=0;shootHeld=false;setPanel(null);updateHUD()}
 function reload(){const w=weapons[gun];if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+(gun===0?1.7:1.25);say('RELOADING',.7)}
 function updateReload(){if(reloadEnd!==0&&elapsed>=reloadEnd){const w=weapons[gun],n=Math.min(w.max-w.mag,w.stock);w.mag+=n;w.stock-=n;reloadEnd=0;updateHUD()}}
@@ -155,9 +183,30 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
  for(const b of enemies)botUpdate(b,dt);if(shootHeld&&weapons[gun].automatic)shoot();if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
 const stage=$('stage');
-addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(mood==='playing')pause();else if(mood==='paused'){mood='playing';setPanel(null)}}if(mood!=='playing')return;if(e.code==='Space'&&eyeY<=1.651)vY=7.5;if(e.code==='Digit1')swap(0);if(e.code==='Digit2')swap(1);if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
-stage.addEventListener('contextmenu',e=>e.preventDefault());stage.addEventListener('mousedown',e=>{if(mood!=='playing')return;e.preventDefault();if(e.button===0){shootHeld=true;shoot()}if(e.button===2)rightHeld=true});addEventListener('mouseup',e=>{if(e.button===0)shootHeld=false;if(e.button===2)rightHeld=false});stage.addEventListener('mouseleave',()=>{mousePrev=null;shootHeld=false;rightHeld=false});stage.addEventListener('mousemove',e=>{if(mood!=='playing')return;if(mousePrev){yaw-=clamp(e.clientX-mousePrev.x,-90,90)*.003;pitch-=clamp(e.clientY-mousePrev.y,-90,90)*.003;pitch=clamp(pitch,-1.25,1.25)}mousePrev={x:e.clientX,y:e.clientY}});
-$('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='playing';setPanel(null)};$('back').onclick=menu;$('endBack').onclick=menu;
+addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(mood==='playing')pause();else if(mood==='paused'){mood='playing';setPanel(null);requestGameMouse()}}if(mood!=='playing')return;if(e.code==='Space'&&eyeY<=1.651)vY=7.5;if(e.code==='Digit1')swap(0);if(e.code==='Digit2')swap(1);if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
+stage.addEventListener('contextmenu',e=>e.preventDefault());
+stage.addEventListener('mousedown',e=>{
+ if(mood!=='playing')return;
+ e.preventDefault();
+ if(document.pointerLockElement!==renderer.domElement)requestGameMouse();
+ if(e.button===0){shootHeld=true;shoot()}
+ if(e.button===2)rightHeld=true;
+});
+addEventListener('mouseup',e=>{if(e.button===0)shootHeld=false;if(e.button===2)rightHeld=false});
+stage.addEventListener('mouseleave',()=>{if(document.pointerLockElement!==renderer?.domElement){mousePrev=null;shootHeld=false;rightHeld=false}});
+document.addEventListener('mousemove',e=>{
+ if(mood!=='playing')return;
+ let dx=0,dy=0;
+ if(document.pointerLockElement===renderer?.domElement){
+   dx=e.movementX||0;dy=e.movementY||0;
+ }else{
+   if(mousePrev){dx=e.clientX-mousePrev.x;dy=e.clientY-mousePrev.y}
+   mousePrev={x:e.clientX,y:e.clientY};
+ }
+ yaw-=clamp(dx,-90,90)*.003;
+ pitch=clamp(pitch-clamp(dy,-90,90)*.003,-1.25,1.25);
+});
+$('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='playing';setPanel(null);requestGameMouse()};$('back').onclick=menu;$('endBack').onclick=menu;
 $('weaponView').style.backgroundImage='url("assets/handgun.png")';
 function log(s){$('status').textContent=s;$('loader').textContent=s}
 async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(frame);const loader=new FBXLoader();log('Parsing your character model…');await new Promise(r=>setTimeout(r,30));const model=loader.parse(await fetchFBX('assets/character.fbx'),'');if(!model){throw Error('character.fbx did not produce a 3D model')}template=model;
