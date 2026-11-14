@@ -31,7 +31,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div id="weaponView"></div><div id="flash"></div>
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
 <div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips">WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT · RIGHT CLICK AIM / ZOOM<br/>R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
-<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot · Right-click to aim and zoom · Space to jump. Requires internet to load Three.js. Upload the FBX and PNG files to GitHub's assets folder to use your artwork.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
+<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena. They take one second to draw after spotting you, and holster after five seconds out of sight.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot · Right-click to aim and zoom · Space to jump. Requires internet to load Three.js. Upload the FBX and PNG files to GitHub's assets folder to use your artwork.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
 
 
 <script>
@@ -43,6 +43,7 @@ window.__dustlineModuleLoaded=true;
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
+import {DRAW_POSE_DELTAS} from './draw_pose_data.js';
 const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
 let scene,camera,renderer,template,walkingClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const PLAYER={x:0,z:15,r:0.52};const keys={};const stats={easy:{speed:1.35,damage:4,fireRate:2.4,accuracy:.4},normal:{speed:2.05,damage:7,fireRate:1.6,accuracy:.66},hard:{speed:2.8,damage:11,fireRate:1.05,accuracy:.9}};
@@ -78,6 +79,95 @@ function buildWorld(){scene=new THREE.Scene();scene.background=new THREE.Color(0
 }
 function collide(x,z,r){return Math.abs(x)>25.4-r||Math.abs(z)>25.4-r||solid.some(b=>x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ)}
 function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collide(obj.x,obj.z+dz,r))obj.z+=dz}
+
+const DRAW_SECONDS=1.0;            // Player gets about one second before the enemy can fire.
+const HOLSTER_AFTER_SECONDS=5.0;  // Five uninterrupted seconds with no visual detection.
+const DRAW_SAMPLE_COUNT=11;
+const DRAW_FRAME_MAX=DRAW_SAMPLE_COUNT-1;
+const TO_RAD=Math.PI/1800;
+function makeEnemyGun(){
+  // Lightweight visible pistol: kept separate from the character mesh so it
+  // can be hidden when holstered. The user's character textures remain intact.
+  const g=new THREE.Group();
+  const metal=new THREE.MeshStandardMaterial({color:0x252a30,metalness:.55,roughness:.42});
+  const grip=new THREE.MeshStandardMaterial({color:0x111418,roughness:.93});
+  function part(w,h,d,x,y,z,mat){
+    const box=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+    box.position.set(x,y,z);box.castShadow=true;g.add(box);
+  }
+  part(.095,.085,.27,0,0,.07,metal);         // Slide/barrel points along character +Z.
+  part(.072,.14,.077,0,-.105,-.003,grip);    // Handle.
+  part(.02,.04,.055,0,-.052,.06,grip);       // Trigger guard.
+  const flare=new THREE.Mesh(new THREE.SphereGeometry(.067,7,5),new THREE.MeshBasicMaterial({color:0xffd783}));
+  flare.position.z=.225;flare.visible=false;g.add(flare);
+  g.userData.muzzleFlash=flare;
+  g.visible=false;scene.add(g);return g;
+}
+function advanceEnemyWeaponState(b,canSee,dt){
+  if(canSee){
+    b.unseenFor=0;
+    if(b.drawProgress<1){
+      b.drawProgress=Math.min(1,b.drawProgress+dt/DRAW_SECONDS);
+      b.weaponState=b.drawProgress>=1?'armed':'drawing';
+    }else b.weaponState='armed';
+  }else{
+    b.unseenFor+=dt;
+    if(b.unseenFor>=HOLSTER_AFTER_SECONDS){
+      b.drawProgress=Math.max(0,b.drawProgress-dt/DRAW_SECONDS);
+      b.weaponState=b.drawProgress>0?'holstering':'holstered';
+    }
+  }
+  b.shootAnim=Math.max(0,b.shootAnim-dt);
+}
+function animateEnemyWeapon(b,dt){
+  // Undo the prior additive pose before updating the original walking cycle.
+  for(const [name,q] of Object.entries(b.previousDrawQuats)){
+    const bone=b.poseBones[name];if(bone)bone.quaternion.multiply(q.clone().invert());
+  }
+  b.previousDrawQuats={};
+  if(b.action)b.action.timeScale=b.moving?1:0;
+  if(b.mixer)b.mixer.update(dt);
+  // The sampled Euler offsets below originate from the user's real
+  // Drawing Gun.fbx, not a guessed arm-raising motion.
+  const index=Math.min(DRAW_FRAME_MAX-1,Math.floor(b.drawProgress*DRAW_FRAME_MAX));
+  const t=b.drawProgress*DRAW_FRAME_MAX-index;
+  for(const [name,bone] of Object.entries(b.poseBones)){
+    const frames=DRAW_POSE_DELTAS[name];if(!frames)continue;
+    const a=frames[index],c=frames[index+1];
+    const euler=new THREE.Euler(
+      (a[0]+(c[0]-a[0])*t)*TO_RAD,
+      (a[1]+(c[1]-a[1])*t)*TO_RAD,
+      (a[2]+(c[2]-a[2])*t)*TO_RAD,
+      'XYZ'
+    );
+    const q=new THREE.Quaternion().setFromEuler(euler);
+    if(name==='RightArm'&&b.shootAnim>0){
+      const kick=Math.sin(Math.PI*b.shootAnim/.18);
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-.12*kick));
+    }
+    bone.quaternion.multiply(q);
+    b.previousDrawQuats[name]=q;
+  }
+  // Follow the animated right hand; when the model has no skeleton, fall back
+  // to a position beside the torso.
+  b.rig.updateMatrixWorld(true);
+  if(b.rightHand){
+    b.rightHand.getWorldPosition(b.propGun.position);
+    b.propGun.position.y-=.04;
+  }else{
+    const a=b.body.rotation.y;
+    b.propGun.position.set(
+      b.x+Math.cos(a)*.38+Math.sin(a)*.40,
+      1.25,
+      b.z-Math.sin(a)*.38+Math.cos(a)*.40
+    );
+  }
+  b.propGun.rotation.set(0,b.body.rotation.y,0);
+  if(b.shootAnim>0)b.propGun.position.y+=Math.sin(Math.PI*b.shootAnim/.18)*.055;
+  b.propGun.visible=b.drawProgress>.24;
+  b.propGun.userData.muzzleFlash.visible=b.shootAnim>.10&&b.propGun.visible;
+}
+
 function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THREE.Group();holder.position.set(x,0,z);scene.add(holder);
  const body=new THREE.Group();holder.add(body);body.add(rig);
  rig.updateMatrixWorld(true);let bb=new THREE.Box3().setFromObject(rig);let height=bb.max.y-bb.min.y;
@@ -87,10 +177,21 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  rig.position.x-=(bb.min.x+bb.max.x)*.5;rig.position.z-=(bb.min.z+bb.max.z)*.5;
  rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
- const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true};hit.userData.bot=bot;hit.name='DUSTLINE_ENEMY_HITBOX';
+ const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
+  weaponState:'holstered',shootAnim:0,poseBones:{},previousDrawQuats:{},
+  rightHand:null,propGun:makeEnemyGun()};hit.userData.bot=bot;
+ rig.traverse(child=>{
+   if(!child.isBone)return;
+   for(const key of Object.keys(DRAW_POSE_DELTAS)){
+     if(child.name.toLowerCase().endsWith(key.toLowerCase())){
+       bot.poseBones[key]=child;break;
+     }
+   }
+ });
+ bot.rightHand=bot.poseBones.RightHand||null;hit.name='DUSTLINE_ENEMY_HITBOX';
  if(walkingClip){bot.mixer=new THREE.AnimationMixer(rig);const act=bot.mixer.clipAction(walkingClip);act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;bot.mixer.update(rnd(0,1.5))}enemies.push(bot);
 }
-function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
+function spawn(){for(const b of enemies){scene.remove(b.holder);scene.remove(b.propGun);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=Math.max(0,Math.ceil(health));$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
@@ -130,33 +231,53 @@ function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');rel
 function reload(){const w=weapon;if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+1.25;say('RELOADING',.7)}
 function updateReload(){if(reloadEnd!==0&&elapsed>=reloadEnd){const w=weapon,n=Math.min(w.max-w.mag,w.stock);w.mag+=n;w.stock-=n;reloadEnd=0;updateHUD()}}
 function lineOfSight(b){v3.set(PLAYER.x,1.65,PLAYER.z);rayOrigin.set(b.x,1.55,b.z);rayDir.copy(v3).sub(rayOrigin);const max=rayDir.length();rayDir.normalize();ray.set(rayOrigin,rayDir);ray.far=max;return ray.intersectObjects(casts,false).length===0}
-function botUpdate(b,dt){if(!b.alive)return;const setting=stats[difficulty];let dx=PLAYER.x-b.x,dz=PLAYER.z-b.z;let distance=Math.hypot(dx,dz)||1;const dirX=dx/distance,dirZ=dz/distance;const los=lineOfSight(b);
- b.time+=dt;b.turnAt-=dt;if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
- let vx=0,vz=0;if(distance>6){vx+=dirX;vz+=dirZ}else if(distance<3.1){vx-=dirX*.75;vz-=dirZ*.75}
- vx+=-dirZ*b.strafe*(los?.50:.18);vz+=dirX*b.strafe*(los?.50:.18);let mag=Math.hypot(vx,vz);b.moving=mag>.13;
- // Use the actual ground displacement, not the direction to the player:
- // bots that strafe east should face east, even while attacking west.
+function botUpdate(b,dt){
+ if(!b.alive)return;
+ const setting=stats[difficulty];
+ const dx=PLAYER.x-b.x,dz=PLAYER.z-b.z;
+ const distance=Math.hypot(dx,dz)||1;
+ const dirX=dx/distance,dirZ=dz/distance;
+ const los=lineOfSight(b);
+ b.time+=dt;b.turnAt-=dt;
+ if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
+ let vx=0,vz=0;
+ if(distance>6){vx+=dirX;vz+=dirZ}
+ else if(distance<3.1){vx-=dirX*.75;vz-=dirZ*.75}
+ vx+=-dirZ*b.strafe*(los?.50:.18);
+ vz+=dirX*b.strafe*(los?.50:.18);
+ const mag=Math.hypot(vx,vz);
+ b.moving=mag>.13;
  const prevX=b.x,prevZ=b.z;
  if(b.moving){vx/=mag;vz/=mag;tryMove(b,vx*dt*setting.speed,vz*dt*setting.speed,b.r)}
  const walkedX=b.x-prevX,walkedZ=b.z-prevZ;
- const walkedDistance=Math.hypot(walkedX,walkedZ);
- b.moving=walkedDistance>0.0005;
+ b.moving=Math.hypot(walkedX,walkedZ)>.0005;
  b.holder.position.set(b.x,0,b.z);
  if(b.moving){
-   // The imported character's front faces +Z; align that front with actual travel.
    const targetAngle=Math.atan2(walkedX,walkedZ);
-   const current=b.body.rotation.y;
-   const difference=Math.atan2(Math.sin(targetAngle-current),Math.cos(targetAngle-current));
+   const difference=Math.atan2(Math.sin(targetAngle-b.body.rotation.y),Math.cos(targetAngle-b.body.rotation.y));
    if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
    else b.body.rotation.y+=difference*Math.min(1,dt*12);
  }
- // Keep the last movement heading while stationary.
- if(b.action)b.action.timeScale=b.moving?1:0;if(b.mixer)b.mixer.update(dt);
- // The enemy's visible facing direction must point toward the player to fire.
- const facingX=Math.sin(b.body.rotation.y),facingZ=Math.cos(b.body.rotation.y);
- const towardPlayerX=(PLAYER.x-b.x)/distance,towardPlayerZ=(PLAYER.z-b.z)/distance;
- const facingPlayer=facingX*towardPlayerX+facingZ*towardPlayerZ>=Math.cos(Math.PI*55/180);
- b.shootDelay-=dt;if(distance<23&&los&&facingPlayer&&b.shootDelay<0){b.shootDelay=setting.fireRate*rnd(.78,1.45);if(Math.random()<setting.accuracy){health=Math.max(0,health-setting.damage);damageAlpha=1;recoil=Math.min(1,recoil+.16);if(health===0){endGame(false);return}}}
+ // Enemies see only within their front 150-degree field of view AND clear LOS.
+ const forwardX=Math.sin(b.body.rotation.y),forwardZ=Math.cos(b.body.rotation.y);
+ const towardX=(PLAYER.x-b.x)/distance,towardZ=(PLAYER.z-b.z)/distance;
+ const facingDot=forwardX*towardX+forwardZ*towardZ;
+ const canSee=distance<23&&los&&facingDot>=Math.cos(75*Math.PI/180);
+ advanceEnemyWeaponState(b,canSee,dt);
+ animateEnemyWeapon(b,dt);
+ // No shots until the full one-second draw has completed. Also retain the
+ // tighter shooting cone so an enemy can't fire backward or sideways.
+ const canFire=canSee&&facingDot>=Math.cos(55*Math.PI/180)&&b.drawProgress>=.999;
+ b.shootDelay-=dt;
+ if(canFire&&b.shootDelay<0){
+   b.shootDelay=setting.fireRate*rnd(.78,1.45);
+   b.shootAnim=.18; // Procedural pistol kick until a distinct shooting FBX is supplied.
+   if(Math.random()<setting.accuracy){
+     health=Math.max(0,health-setting.damage);
+     damageAlpha=1;recoil=Math.min(1,recoil+.16);
+     if(health===0){endGame(false);return}
+   }
+ }
 }
 function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(elapsed<nextShot)return;if(w.mag<=0){reload();return}
  nextShot=elapsed+w.rate;w.mag--;recoil=1;flash=1;updateHUD();if(w.mag===0)say('PRESS R TO RELOAD',1.1);
@@ -164,7 +285,7 @@ function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(e
  const targets=[...casts,...enemies.filter(b=>b.alive).map(b=>b.hit)];const intersects=ray.intersectObjects(targets,false);
  if(intersects.length){const object=intersects[0].object;const bot=object.userData.bot;
  if(bot&&bot.alive){bot.hp-=w.damage;$('hitmark').style.opacity=1;hitTimer=.14;
- if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
+ if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);scene.remove(bot.propGun);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
 }
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
