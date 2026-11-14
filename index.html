@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DUSTLINE // Character + Walking Enemy Test</title>
+<style>
+:root{--ink:#07131d;--cream:#edf3f2;--accent:#e6ad5e;--cyan:#6fd9e4;--sub:#b2c6ce}
+*{box-sizing:border-box}body,html{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,Segoe UI,Arial,sans-serif;background:#172935;color:var(--cream)}
+button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab5d2}#stage canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+#vignette{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 145px #061a2588;z-index:2}
+#hud{pointer-events:none;position:fixed;inset:0;z-index:4;display:none}#topbar{position:absolute;left:24px;right:24px;top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.brand{letter-spacing:.19em;font-weight:1000;font-size:20px;text-shadow:0 2px 8px #1239}.brand span{color:var(--accent)}.micro{font-size:10px;letter-spacing:.15em;color:#def4fa;font-weight:800;text-shadow:0 2px 6px #143b}.stat{display:inline-flex;flex-direction:column;align-items:end;gap:2px;margin-left:18px}.stat b{font-size:22px;text-shadow:0 2px 10px #102939}.stat small{font-size:9px;letter-spacing:.14em;color:#d6e4e6;font-weight:800}
+#bottom{position:absolute;left:24px;bottom:20px;display:flex;align-items:end;gap:25px}.metric{padding:12px 15px;background:#0b2235c9;border:1px solid #b7d5df33;min-width:100px}.metric .n{font-size:32px;font-weight:1000;line-height:1}.metric .n strong{color:var(--accent);font-size:17px}.metric label{font-size:10px;color:#c0d0d5;letter-spacing:.13em}#weaponHud{min-width:168px}
+#tips{position:absolute;right:18px;bottom:18px;text-align:right;font-size:10px;line-height:1.8;font-weight:800;color:#e7f3f7bb;text-shadow:0 2px 7px #04101e;letter-spacing:.05em}
+#reticle{position:fixed;left:50%;top:50%;width:29px;height:29px;transform:translate(-50%,-50%);z-index:5;pointer-events:none;display:none;filter:drop-shadow(0 1px 2px #0009)}
+#reticle .bar{position:absolute;background:white;box-shadow:0 0 2px #06101955;border-radius:1px}#reticle .up{width:3px;height:8px;left:13px;top:0}#reticle .down{width:3px;height:8px;left:13px;bottom:0}#reticle .left{height:3px;width:8px;left:0;top:13px}#reticle .right{height:3px;width:8px;right:0;top:13px}#reticle.aim .up{height:14px;top:0}#reticle.aim .down{height:14px;bottom:0}#reticle.aim .left{width:14px;left:0}#reticle.aim .right{width:14px;right:0}
+#weaponView{position:absolute;z-index:3;pointer-events:none;right:-1vw;bottom:-2vw;width:min(46vw,580px);height:min(40vw,490px);background-repeat:no-repeat;background-size:contain;background-position:right bottom;transform-origin:78% 82%;display:none;filter:drop-shadow(0 15px 12px #0b182b77)}#rifleView{position:absolute;right:0;bottom:0;width:min(46vw,620px);height:min(19vw,260px);transform:rotate(-7deg);background:linear-gradient(180deg,#555b58,#171d20 55%,#080a0c);border:6px solid #0c1114;clip-path:polygon(2% 30%,52% 22%,62% 2%,84% 2%,84% 23%,100% 25%,100% 57%,68% 57%,61% 100%,47% 100%,52% 60%,13% 60%);filter:drop-shadow(3px 14px 10px #09182788);display:none;pointer-events:none;z-index:3;transform-origin:60% 60%}
+#flash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:85px;height:85px;pointer-events:none;z-index:3;opacity:0;background:radial-gradient(circle,#fff4 0%,#f5e0a8aa 14%,#ffb64f44 30%,transparent 70%);border-radius:50%}
+#hitmark{position:absolute;left:50%;top:50%;color:#f5f0d8;font-size:28px;font-weight:1000;text-shadow:0 2px 6px black;transform:translate(-50%,-50%);z-index:6;opacity:0;pointer-events:none}
+#message{position:absolute;top:17%;left:50%;transform:translateX(-50%);color:white;font-weight:900;letter-spacing:.14em;text-shadow:0 2px 12px #062437;opacity:0;transition:opacity .2s;z-index:6;font-size:13px;pointer-events:none;text-align:center;max-width:80vw}
+#damage{position:fixed;inset:0;z-index:2;box-shadow:inset 0 0 140px 38px #ee3644;opacity:0;pointer-events:none}
+#overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:flex-start;background:linear-gradient(90deg,#07141ce6,#07141cce 46%,#07141c88);padding:5vw;overflow:auto}
+.panel{width:min(515px,94vw);padding:26px 28px;background:#0c1d2bdf;border:1px solid #8db4bb44;box-shadow:0 25px 80px #08131caa}h1{font-size:clamp(54px,7vw,85px);line-height:0.9;margin:14px 0 16px;letter-spacing:-.055em;font-weight:1000}h1 span{color:var(--accent)}p{line-height:1.55;color:#bccfd7;font-size:14px}small{color:#aabfc5}#status{padding:12px 13px;margin-top:16px;color:#dcf1eb;background:#243e46a9;border:1px solid #4b827d77;font-weight:700;font-size:12px;line-height:1.45;word-break:break-word}.eyebrow{letter-spacing:.21em;color:var(--cyan);font-size:11px;font-weight:900}.diffrow{display:flex;gap:8px;margin:17px 0 8px}.diffrow button{flex:1;min-width:0;border:1px solid #91aab055;padding:13px 7px;color:#dbeaf0;background:#182c3b;font-weight:900;letter-spacing:.08em}.diffrow button.active{border-color:var(--accent);background:#57442e;color:#fff3d7}.primary{margin-top:12px;width:100%;padding:18px;border:0;background:var(--accent);color:#111b20;font-weight:1000;letter-spacing:.13em;font-size:14px}.primary:disabled{opacity:.55;cursor:not-allowed}.secondary{margin-top:8px;width:100%;padding:12px;background:transparent;border:1px solid #60828b;color:#c0d9e0;font-weight:800}.foot{font-size:11px;color:#93aab4;line-height:1.6;margin-top:14px}#endstats{font-weight:900;color:var(--accent);font-size:24px;margin:16px 0}
+#loader{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:white;z-index:13;font-size:11px;text-shadow:0 1px 6px #000;font-weight:700}
+@media(max-width:670px){.panel{padding:18px}#topbar{left:12px;right:12px}#bottom{left:12px;bottom:8px;gap:5px}.metric{padding:9px;min-width:85px}.metric .n{font-size:24px}.brand{font-size:14px}#tips{display:none}#weaponView{width:75vw;height:45vw}#rifleView{width:70vw;height:32vw}.stat{margin-left:5px}.stat b{font-size:16px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="stage"></div><div id="vignette"></div><div id="damage"></div>
+<div id="weaponView"></div><div id="rifleView"></div><div id="flash"></div>
+<div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
+<div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">30</span><strong id="reserve"> / 120</strong></div><label id="gunName">AK-47</label></div></div><div id="tips">WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT + ZOOM · RIGHT CLICK ZOOM<br/>1/2 SWAP · R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
+<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot and zoom · Right-click to zoom only · Space to jump · 1/2 to switch weapons. Requires internet to load Three.js, but model files are embedded in the download.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
+
+
+<script>
+window.__dustlineModuleLoaded=false;
+window.addEventListener("load",()=>setTimeout(()=>{if(!window.__dustlineModuleLoaded){const box=document.getElementById("status"),button=document.getElementById("play");if(box)box.textContent="3D library could not load. Check your internet connection and open this game in a regular Chrome tab, not the ChatGPT preview.";if(button)button.textContent="3D LIBRARY UNAVAILABLE";document.getElementById("loader").style.display="none"}},16000));
+</script>
+<script type="module">
+window.__dustlineModuleLoaded=true;
+import * as THREE from 'three';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
+const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
+let scene,camera,renderer,template,walkingClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,gun=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
+const PLAYER={x:0,z:15,r:0.52};const keys={};const stats={easy:{speed:1.35,damage:4,fireRate:2.4,accuracy:.4},normal:{speed:2.05,damage:7,fireRate:1.6,accuracy:.66},hard:{speed:2.8,damage:11,fireRate:1.05,accuracy:.9}};
+const weapons=[{name:'AK-47',max:30,mag:30,stock:150,rate:.105,damage:29,spread:.023,automatic:true},{name:'HANDGUN',max:15,mag:15,stock:75,rate:.25,damage:43,spread:.010,automatic:false}];
+const ray=new THREE.Raycaster();ray.far=95;const UP=new THREE.Vector3(0,1,0);const rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),v3=new THREE.Vector3();
+function say(str,secs=2){$('message').textContent=str;$('message').style.opacity=1;toastTimer=secs}
+function setPanel(which){$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which||gun!==1?'none':'block';$('rifleView').style.display=which||gun!==0?'none':'block'}
+for(const btn of document.querySelectorAll('[data-level]'))btn.addEventListener('click',()=>{difficulty=btn.dataset.level;document.querySelectorAll('[data-level]').forEach(el=>el.classList.toggle('active',el===btn))});
+async function fetchFBX(url){const response=await fetch(url);if(!response.ok)throw Error("Could not load "+url+" (HTTP "+response.status+")");return await response.arrayBuffer()}
+function buildWorld(){scene=new THREE.Scene();scene.background=new THREE.Color(0x99c4e3);scene.fog=new THREE.Fog(0x99c4e3,25,75);
+ camera=new THREE.PerspectiveCamera(78,window.innerWidth/window.innerHeight,.08,110);camera.rotation.order='YXZ';
+ renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;$('stage').appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xe5f4ff,0x6d694f,2.4));const sun=new THREE.DirectionalLight(0xffe2b2,2.5);sun.position.set(-16,27,-13);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-40;sun.shadow.camera.right=40;sun.shadow.camera.top=40;sun.shadow.camera.bottom=-40;scene.add(sun);
+ const floor=new THREE.Mesh(new THREE.PlaneGeometry(56,56),new THREE.MeshStandardMaterial({color:0xb7a689,roughness:1}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);const grid=new THREE.GridHelper(56,28,0x796e58,0x98866c);grid.position.y=.014;scene.add(grid);
+ const boxMat=(color)=>new THREE.MeshStandardMaterial({color,roughness:.92,metalness:.05});
+ function addBox(x,z,w,d,h,color,obstacle=true){const ob=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),boxMat(color));ob.position.set(x,h/2,z);ob.receiveShadow=true;ob.castShadow=true;scene.add(ob);casts.push(ob);if(obstacle)solid.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2,mesh:ob});return ob}
+ addBox(0,-27,56,2,4,0x9d8675);addBox(0,27,56,2,4,0x9d8675);addBox(-27,0,2,56,4,0x9d8675);addBox(27,0,2,56,4,0x9d8675);
+ [[-10,7,5,4,2.8,0x4b6574],[9,4,6,4,2.7,0x647983],[-11,-10,9,2.5,2.7,0x597a7e],[11,-11,9,3,3.1,0x69786a],[0,0,3,3,2.4,0x796a52],[2,-17,5,3,2.9,0x7f7260],[-19,0,4,4,2.5,0x596774],[19,-1,4,5,2.8,0x587481],[0,13,3,2,1.7,0x76736c]].forEach(args=>addBox(...args));
+ for(let i=0;i<16;i++){let x=rnd(-22,22),z=rnd(-22,22);if(Math.hypot(x,z-15)<7||solid.some(b=>x>b.minX-2&&x<b.maxX+2&&z>b.minZ-2&&z<b.maxZ+2))continue;addBox(x,z,1.5,1.5,rnd(.8,1.7),0x8b836c)}
+ for(let i=0;i<9;i++){let x=-23+i*5.5;const stripe=new THREE.Mesh(new THREE.BoxGeometry(1.5,.02,.13),new THREE.MeshBasicMaterial({color:0xecdda9}));stripe.position.set(x,.026,19.9);scene.add(stripe)}
+ addEventListener('resize',()=>{if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+}
+function collide(x,z,r){return Math.abs(x)>25.4-r||Math.abs(z)>25.4-r||solid.some(b=>x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ)}
+function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collide(obj.x,obj.z+dz,r))obj.z+=dz}
+function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THREE.Group();holder.position.set(x,0,z);scene.add(holder);
+ const body=new THREE.Group();holder.add(body);body.add(rig);
+ rig.updateMatrixWorld(true);let bb=new THREE.Box3().setFromObject(rig);let height=bb.max.y-bb.min.y;
+ // FBX exporter scale varies: normalize the visible rig to a human-sized enemy.
+ if(!Number.isFinite(height)||height<.00001)height=170;const factor=1.92/height;rig.scale.multiplyScalar(factor);rig.updateMatrixWorld(true);bb=new THREE.Box3().setFromObject(rig);rig.position.y-=bb.min.y;
+ // Put the model's origin at its horizontal center; otherwise Mixamo meshes can be offset.
+ rig.position.x-=(bb.min.x+bb.max.x)*.5;rig.position.z-=(bb.min.z+bb.max.z)*.5;
+ rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
+ const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
+ const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,mixer:null,shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),moving:true};hit.userData.bot=bot;hit.name='DUSTLINE_ENEMY_HITBOX';
+ if(walkingClip){bot.mixer=new THREE.AnimationMixer(rig);const act=bot.mixer.clipAction(walkingClip);act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;bot.mixer.update(rnd(0,1.5))}enemies.push(bot);
+}
+function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
+ [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
+}
+function updateHUD(){$('hp').textContent=Math.max(0,Math.ceil(health));$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapons[gun].mag;$('reserve').textContent=' / '+weapons[gun].stock;$('gunName').textContent=weapons[gun].name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
+function start(){if(!template||!walkingClip){$('status').textContent='Models are not ready yet. Check loading status.';return}
+ mood='playing';elapsed=0;kills=0;health=100;gun=0;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;for(let w of weapons){w.mag=w.max;w.stock=w.name==='AK-47'?150:75}spawn();setPanel(null);updateHUD();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
+function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five of your custom enemy models were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
+function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause')}
+function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu')}
+function swap(i){if(gun===i)return;gun=i;recoil=0;shootHeld=false;setPanel(null);updateHUD()}
+function reload(){const w=weapons[gun];if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+(gun===0?1.7:1.25);say('RELOADING',.7)}
+function updateReload(){if(reloadEnd!==0&&elapsed>=reloadEnd){const w=weapons[gun],n=Math.min(w.max-w.mag,w.stock);w.mag+=n;w.stock-=n;reloadEnd=0;updateHUD()}}
+function lineOfSight(b){v3.set(PLAYER.x,1.65,PLAYER.z);rayOrigin.set(b.x,1.55,b.z);rayDir.copy(v3).sub(rayOrigin);const max=rayDir.length();rayDir.normalize();ray.set(rayOrigin,rayDir);ray.far=max;return ray.intersectObjects(casts,false).length===0}
+function botUpdate(b,dt){if(!b.alive)return;const setting=stats[difficulty];let dx=PLAYER.x-b.x,dz=PLAYER.z-b.z;let distance=Math.hypot(dx,dz)||1;const dirX=dx/distance,dirZ=dz/distance;const los=lineOfSight(b);
+ b.time+=dt;b.turnAt-=dt;if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
+ let vx=0,vz=0;if(distance>6){vx+=dirX;vz+=dirZ}else if(distance<3.1){vx-=dirX*.75;vz-=dirZ*.75}
+ vx+=-dirZ*b.strafe*(los?.50:.18);vz+=dirX*b.strafe*(los?.50:.18);let mag=Math.hypot(vx,vz);b.moving=mag>.13;
+ if(b.moving){vx/=mag;vz/=mag;tryMove(b,vx*dt*setting.speed,vz*dt*setting.speed,b.r)}b.holder.position.set(b.x,0,b.z);
+ // Mixamo mesh faces forward by default; rotate toward the player.
+ const targetAngle=Math.atan2(dirX,dirZ)+Math.PI;let current=b.body.rotation.y;let dd=Math.atan2(Math.sin(targetAngle-current),Math.cos(targetAngle-current));b.body.rotation.y+=dd*Math.min(1,dt*5);
+ if(b.action)b.action.timeScale=b.moving?1:0;if(b.mixer)b.mixer.update(dt);
+ b.shootDelay-=dt;if(distance<23&&los&&b.shootDelay<0){b.shootDelay=setting.fireRate*rnd(.78,1.45);if(Math.random()<setting.accuracy){health=Math.max(0,health-setting.damage);damageAlpha=1;recoil=Math.min(1,recoil+.16);if(health===0){endGame(false);return}}}
+}
+function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapons[gun];if(elapsed<nextShot)return;if(w.mag<=0){reload();return}
+ nextShot=elapsed+w.rate;w.mag--;recoil=1;flash=1;updateHUD();if(w.mag===0)say('PRESS R TO RELOAD',1.1);
+ camera.updateMatrixWorld();const forward=new THREE.Vector3();camera.getWorldDirection(forward);const spread=w.spread*(1-.75*aimAmount);forward.add(new THREE.Vector3(rnd(-spread,spread),rnd(-spread,spread),rnd(-spread,spread))).normalize();ray.set(camera.position,forward);ray.far=85;
+ const targets=[...casts,...enemies.filter(b=>b.alive).map(b=>b.hit)];const intersects=ray.intersectObjects(targets,false);
+ if(intersects.length){const object=intersects[0].object;const bot=object.userData.bot;
+ if(bot&&bot.alive){bot.hp-=w.damage;$('hitmark').style.opacity=1;hitTimer=.14;
+ if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
+}
+function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=gun===1?$('weaponView'):$('rifleView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
+function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
+ if(mood==='playing'){elapsed+=dt;updateReload();let aiming=rightHeld||shootHeld;aimAmount+=(Number(aiming)-aimAmount)*Math.min(1,dt*10);camera.fov=78-31*aimAmount;camera.updateProjectionMatrix();$('reticle').classList.toggle('aim',aimAmount>.42);
+ // movement relative to camera heading
+ let forward=(keys.KeyW?1:0)-(keys.KeyS?1:0),side=(keys.KeyD?1:0)-(keys.KeyA?1:0);let len=Math.hypot(forward,side);if(len){forward/=len;side/=len;let speed=(keys.ShiftLeft||keys.ShiftRight)?8.4:5.3;if(aiming)speed*=.72;tryMove(PLAYER,(Math.sin(yaw)*forward+Math.cos(yaw)*side)*speed*dt,(-Math.cos(yaw)*forward+Math.sin(yaw)*side)*speed*dt,PLAYER.r)}
+ if(keys.ArrowLeft)yaw+=dt*1.55;if(keys.ArrowRight)yaw-=dt*1.55;if(keys.ArrowUp)pitch+=dt*1.1;if(keys.ArrowDown)pitch-=dt*1.1;pitch=clamp(pitch,-1.25,1.25);
+ vY-=19.5*dt;eyeY+=vY*dt;if(eyeY<1.65){eyeY=1.65;vY=0}camera.position.set(PLAYER.x,eyeY,PLAYER.z);camera.rotation.set(pitch,yaw,0,'YXZ');
+ for(const b of enemies)botUpdate(b,dt);if(shootHeld&&weapons[gun].automatic)shoot();if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
+ }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
+const stage=$('stage');
+addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(mood==='playing')pause();else if(mood==='paused'){mood='playing';setPanel(null)}}if(mood!=='playing')return;if(e.code==='Space'&&eyeY<=1.651)vY=7.5;if(e.code==='Digit1')swap(0);if(e.code==='Digit2')swap(1);if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
+stage.addEventListener('contextmenu',e=>e.preventDefault());stage.addEventListener('mousedown',e=>{if(mood!=='playing')return;e.preventDefault();if(e.button===0){shootHeld=true;shoot()}if(e.button===2)rightHeld=true});addEventListener('mouseup',e=>{if(e.button===0)shootHeld=false;if(e.button===2)rightHeld=false});stage.addEventListener('mouseleave',()=>{mousePrev=null;shootHeld=false;rightHeld=false});stage.addEventListener('mousemove',e=>{if(mood!=='playing')return;if(mousePrev){yaw-=clamp(e.clientX-mousePrev.x,-90,90)*.003;pitch-=clamp(e.clientY-mousePrev.y,-90,90)*.003;pitch=clamp(pitch,-1.25,1.25)}mousePrev={x:e.clientX,y:e.clientY}});
+$('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='playing';setPanel(null)};$('back').onclick=menu;$('endBack').onclick=menu;
+$('weaponView').style.backgroundImage='url("assets/handgun.png")';
+function log(s){$('status').textContent=s;$('loader').textContent=s}
+async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(frame);const loader=new FBXLoader();log('Parsing your character model…');await new Promise(r=>setTimeout(r,30));const model=loader.parse(await fetchFBX('assets/character.fbx'),'');if(!model){throw Error('character.fbx did not produce a 3D model')}template=model;
+ // Explicitly load the animation from the uploaded Walking.fbx, not a generic walk cycle.
+ log('Loading walking FBX animation…');await new Promise(r=>setTimeout(r,50));const walk=loader.parse(await fetchFBX('assets/walking.fbx'),'');const clips=walk.animations||[];walkingClip=clips.find(c=>/mixamo\.com/i.test(c.name)&&c.tracks.length>0)||clips.find(c=>c.duration>.1&&c.tracks.length>0);
+ if(!walkingClip)throw Error('Walking.fbx contains no usable animation clips');
+ const match=walkingClip.tracks.filter(track=>track.name.includes('mixamorig')).length;
+ if(!match)throw Error('Could not match animation bone tracks to the character');
+ // Keep the feet walking in place while AI drives the real enemy position.
+ for(const tr of walkingClip.tracks){if(/Hips\.position$/i.test(tr.name)&&tr.values&&tr.values.length>=3){const x=tr.values[0], z=tr.values[2];for(let i=0;i<tr.values.length;i+=3){tr.values[i]=x;tr.values[i+2]=z}}}
+ log('Ready: your character + '+walkingClip.name+' walking clip ('+walkingClip.tracks.length+' tracks)');$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
+ }catch(e){console.error(e);$('status').textContent='Could not load your FBX assets: '+(e?.message||e)+'. Try opening in Chrome with internet access.';$('play').disabled=true;$('play').textContent='MODEL LOADING FAILED';$('loader').style.display='none'}}
+init();
+</script>
+</body></html>
