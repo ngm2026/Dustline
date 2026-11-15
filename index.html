@@ -308,7 +308,7 @@ function botUpdate(b,dt){
  // Spot a new target only in the front field of view. Once spotted, keep
  // tracking the player regardless of movement/strafe direction. Retain the
  // last known target heading briefly after line of sight breaks.
- const initialFacing=-Math.sin(b.body.rotation.y)*dirX-Math.cos(b.body.rotation.y)*dirZ;
+ const initialFacing=Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
  const withinRange=distance<23;
  const canSee=withinRange&&los&&
    (initialFacing>=Math.cos(75*Math.PI/180)||b.time<b.engagedUntil);
@@ -338,8 +338,8 @@ function botUpdate(b,dt){
    const aimZ=(canSee?PLAYER.z:b.lastKnownZ)-b.z;
    const aimDistance=Math.hypot(aimX,aimZ);
    if(!tracking||aimDistance>.01){
-     // The original Mixamo character and weapon animations face local -Z.
-     const targetAngle=(tracking?Math.atan2(aimX,aimZ):Math.atan2(walkedX,walkedZ))+Math.PI;
+     // Character's visible forward direction is local +Z.
+     const targetAngle=tracking?Math.atan2(aimX,aimZ):Math.atan2(walkedX,walkedZ);
      const difference=Math.atan2(Math.sin(targetAngle-b.body.rotation.y),Math.cos(targetAngle-b.body.rotation.y));
      if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
      else b.body.rotation.y+=difference*Math.min(1,dt*(tracking?9:12));
@@ -364,7 +364,7 @@ function botUpdate(b,dt){
 
  // Shooting requires clear sight, a completed draw, and the gun actually
  // pointing toward the player. Tracking never allows shots through cover.
- const facingDot=-Math.sin(b.body.rotation.y)*dirX-Math.cos(b.body.rotation.y)*dirZ;
+ const facingDot=Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
  const canFire=canSee&&facingDot>=Math.cos(25*Math.PI/180)&&b.drawProgress>=.999;
  b.shootDelay-=dt;
  if(canFire&&b.shootDelay<0){
