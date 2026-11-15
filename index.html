@@ -160,6 +160,26 @@ function advanceEnemyWeaponState(b,canSee,dt){
 function poseBoneId(name){
  return name.replace(/[^a-zA-Z0-9]/g,'').toLowerCase().replace(/^mixamorig[0-9]*/,'');
 }
+// The exact right-arm guard pose is baked from frame 18/60 of the supplied
+// Drawing_Gun_Animation.fbx (Mixamo skeleton; rotations include FBX PreRotation).
+// Unlike sampling an optional runtime animation clip, this GUARANTEES the
+// raised-hand stance can be applied from spawn onward.
+const GUARD_RIGHT_ARM_QUATERNIONS={
+ rightshoulder:[-0.595805,0.426951,0.596259,-0.327420],
+ rightarm:[0.627633,-0.164820,-0.322214,0.689267],
+ rightforearm:[0.020850,0.055477,-0.552227,0.831585],
+ righthand:[-0.019671,0.268497,-0.000072,0.963080]
+};
+function buildGuardPose(rig){
+ const guard=[];
+ rig.traverse(bone=>{
+   if(!bone.isBone)return;
+   const values=GUARD_RIGHT_ARM_QUATERNIONS[poseBoneId(bone.name)];
+   if(values)guard.push({bone,quat:new THREE.Quaternion().fromArray(values).normalize()});
+ });
+ if(guard.length!==4)console.warn('DUSTLINE guard pose: matched',guard.length,'of 4 right-arm bones');
+ return guard;
+}
 function buildFBXPoseSampler(clip,rig){
  if(!clip)return [];
  const bones=new Map();
@@ -182,14 +202,11 @@ function animateEnemyWeapon(b,dt){
  if(b.action)b.action.timeScale=b.moving?1:0;
  if(b.mixer)b.mixer.update(dt);
 
- // FIXED GUARD STANCE: always apply the exact same upper-body frame
- // from the original draw FBX. Walking can still animate the legs, and
- // shooting temporarily overrides arms before they return to this pose.
- if(drawClip&&b.drawPose.length){
-   const guardTime=DRAW_HOLD_FRACTION*drawClip.duration;
-   for(const channel of b.drawPose)
-     channel.bone.quaternion.fromArray(channel.sampler.evaluate(guardTime));
- }
+ // FIXED GUARD STANCE: these source-baked rotations are applied EVERY
+ // frame after walking, not gated on drawClip, line of sight or firing state.
+ // Only the four right-arm bones are overridden; the walking legs and
+ // lowered left hand remain animated. Shooting temporarily blends over them.
+ for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
 
  if(b.shootAnim>0&&b.shootPose.length){
    // The shooting clip begins from its own aimed pose. Blend into the actual
@@ -237,7 +254,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,
-  mixer:null,drawPose:[],shootPose:[],
+  mixer:null,guardPose:[],shootPose:[],
   shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
   moving:true,readyProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
   weaponState:'guard',shootAnim:0,
@@ -249,9 +266,8 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
    act.setLoop(THREE.LoopRepeat);act.play();bot.action=act;
    bot.mixer.update(rnd(0,1.5));
  }
- bot.drawPose=buildFBXPoseSampler(drawClip,rig);
+ bot.guardPose=buildGuardPose(rig);
  bot.shootPose=buildFBXPoseSampler(shootClip,rig);
- if(drawClip&&bot.drawPose.length===0)console.warn('DUSTLINE: drawing FBX tracks did not match character bones');
  if(shootClip&&bot.shootPose.length===0)console.warn('DUSTLINE: shooting FBX tracks did not match character bones');
  enemies.push(bot);
 }
