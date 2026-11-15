@@ -139,10 +139,9 @@ function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collid
 // No fake gun or extra character model is created.
 const SHOOT_SECONDS=.38;
 const DRAW_SECONDS=1.0;
-const DRAW_HOLD_FRACTION=.30; // The hand-up peak of the user's Drawing_Gun_Animation.fbx.
 const HOLSTER_AFTER_SECONDS=5.0;
 function advanceEnemyWeaponState(b,canSee,dt){
- // Every enemy ALWAYS keeps the screenshot's raised-hand guard pose.
+ // Every enemy ALWAYS keeps the FBX's exact final-frame guard pose.
  // Preserve the original 1-second reaction delay as invisible AI readiness
  // rather than lowering/raising the arms every time the player is spotted.
  b.weaponState='guard';
@@ -164,20 +163,64 @@ function poseBoneId(name){
 // Drawing_Gun_Animation.fbx (Mixamo skeleton; rotations include FBX PreRotation).
 // Unlike sampling an optional runtime animation clip, this GUARANTEES the
 // raised-hand stance can be applied from spawn onward.
-const GUARD_RIGHT_ARM_QUATERNIONS={
- rightshoulder:[-0.595805,0.426951,0.596259,-0.327420],
- rightarm:[0.627633,-0.164820,-0.322214,0.689267],
- rightforearm:[0.020850,0.055477,-0.552227,0.831585],
- righthand:[-0.019671,0.268497,-0.000072,0.963080]
+// Exact FINAL pose of the user's 61-keyframe Drawing_Gun_Animation.fbx.
+// Extracted from animation frame 60/60, including FBX PreRotation and
+// the ZYX Euler order used by Three.js's FBXLoader. Both arms, shoulders,
+// torso, neck, head, and finger articulations are included. No fake prop.
+const GUARD_FINAL_FRAME_QUATERNIONS={
+ spine:[-0.040071189,0.000547988,0.001074926,0.999196099],
+ spine1:[0.043738801,0.001100008,0.001812758,0.999040751],
+ spine2:[0.043738732,0.001100015,0.001812756,0.999040754],
+ neck:[0.13729058,0.018678276,0.038017806,0.989624709],
+ head:[-0.106151607,0.050246385,-0.068427579,0.990719336],
+ leftshoulder:[0.65321868,0.334775248,-0.572041907,0.366058665],
+ leftarm:[0.18700882,0.082761662,0.082905755,0.975348576],
+ leftforearm:[0.037012043,-0.001339533,0.311406103,0.949554924],
+ lefthand:[-0.056732766,0.180087371,-0.015058374,0.981897743],
+ lefthandthumb1:[0.30536873,0.15757191,0.324845406,0.881133641],
+ lefthandthumb2:[-0.019005177,-0.006620695,0.076315502,0.996880592],
+ lefthandthumb3:[-0.001330197,-0.011614682,0.101922785,0.994723618],
+ lefthandindex1:[0.07977445,0.063205939,0.130901667,0.986157087],
+ lefthandindex2:[0.092656414,-0.000308958,-0.006224093,0.99567864],
+ lefthandindex3:[0.000000354,-0.000014183,-0.001170827,0.999999314],
+ lefthandmiddle1:[0.021213621,0.009694504,-0.008489785,0.999691914],
+ lefthandmiddle2:[0.138952254,-0.000703837,0.004981955,0.9902863],
+ lefthandmiddle3:[0.000000256,-0.000029122,-0.000448657,0.999999899],
+ lefthandring1:[0.053481052,0.003599232,-0.043816332,0.997600597],
+ lefthandring2:[0.207430545,0.003667819,0.021159475,0.978014004],
+ lefthandring3:[-0.000000263,0.000004494,0.000507677,0.999999871],
+ lefthandpinky1:[0.121212794,-0.030683534,-0.188993158,0.973985403],
+ lefthandpinky2:[0.251732749,0.006362957,0.04845977,0.966561838],
+ lefthandpinky3:[-0.000000094,0.000052767,0.000913483,0.999999581],
+ rightshoulder:[0.611350486,-0.285581876,0.551469549,0.490484364],
+ rightarm:[0.332475599,0.023739978,0.083761437,0.93908488],
+ rightforearm:[0.080453268,0.000896203,-0.768929043,0.634251208],
+ righthand:[-0.275666607,-0.209315305,-0.263384203,0.900457543],
+ righthandthumb1:[0.118073329,-0.333010936,-0.238084503,0.904697836],
+ righthandthumb2:[-0.014338995,0.007780958,-0.050508848,0.99859036],
+ righthandthumb3:[-0.000082294,0.000893069,-0.093821445,0.995588636],
+ righthandindex1:[0.097395316,-0.012636654,-0.127511552,0.986962649],
+ righthandindex2:[0.190052635,0.000512558,0.011072225,0.981711332],
+ righthandindex3:[0.000000104,-0.000000689,0.000192059,0.999999982],
+ righthandmiddle1:[0.253482664,0.015996769,-0.115835998,0.960246147],
+ righthandmiddle2:[0.749749338,0.00347297,-0.037363335,0.660657135],
+ righthandmiddle3:[0.000000382,-0.000005918,-0.000188515,0.999999982],
+ righthandring1:[0.304726032,0.064090039,-0.121783927,0.942445323],
+ righthandring2:[0.683022056,-0.004278446,-0.065785403,0.727416557],
+ righthandring3:[-0.000000599,0.000179865,-0.003782629,0.99999283],
+ righthandpinky1:[0.336253736,-0.004308106,-0.098294275,0.936617906],
+ righthandpinky2:[0.391452835,-0.033206835,-0.087919394,0.915386347],
+ righthandpinky3:[0.000000465,0.000027936,0.002200043,0.99999758]
 };
 function buildGuardPose(rig){
  const guard=[];
  rig.traverse(bone=>{
    if(!bone.isBone)return;
-   const values=GUARD_RIGHT_ARM_QUATERNIONS[poseBoneId(bone.name)];
+   const values=GUARD_FINAL_FRAME_QUATERNIONS[poseBoneId(bone.name)];
    if(values)guard.push({bone,quat:new THREE.Quaternion().fromArray(values).normalize()});
  });
- if(guard.length!==4)console.warn('DUSTLINE guard pose: matched',guard.length,'of 4 right-arm bones');
+ const expected=Object.keys(GUARD_FINAL_FRAME_QUATERNIONS).length;
+ if(guard.length!==expected)console.warn('DUSTLINE final-frame pose matched',guard.length,'of',expected,'bones');
  return guard;
 }
 function buildFBXPoseSampler(clip,rig){
@@ -202,10 +245,9 @@ function animateEnemyWeapon(b,dt){
  if(b.action)b.action.timeScale=b.moving?1:0;
  if(b.mixer)b.mixer.update(dt);
 
- // FIXED GUARD STANCE: these source-baked rotations are applied EVERY
- // frame after walking, not gated on drawClip, line of sight or firing state.
- // Only the four right-arm bones are overridden; the walking legs and
- // lowered left hand remain animated. Shooting temporarily blends over them.
+ // EXACT FINAL FRAME: bone rotations copied after the walking mixer on every
+ // frame. Every upper-body and finger joint matches the Drawing Gun FBX's
+ // last keyframe; legs remain controlled by walking. Shooting blends over it.
  for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
 
  if(b.shootAnim>0&&b.shootPose.length){
