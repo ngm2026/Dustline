@@ -168,7 +168,7 @@ function buildFBXPoseSampler(clip,rig){
  rig.traverse(o=>{if(o.isBone)bones.set(poseBoneId(o.name),o)});
  const channels=[];
  for(const track of clip.tracks){
-   if(!/\\.quaternion$/i.test(track.name))continue;
+   if(!/\.quaternion$/i.test(track.name))continue;
    const boneName=track.name.slice(0,track.name.lastIndexOf('.'));
    const bone=bones.get(poseBoneId(boneName));
    if(!bone)continue;
