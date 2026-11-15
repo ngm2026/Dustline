@@ -215,7 +215,8 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
   mixer:null,weaponMixer:null,drawAction:null,shootAction:null,
   shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
   moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
-  weaponState:'holstered',shootAnim:0
+  weaponState:'holstered',shootAnim:0,
+  engagedUntil:0,lastKnownX:x,lastKnownZ:z
  };hit.userData.bot=bot;hit.name='DUSTLINE_ENEMY_HITBOX';
  if(walkingClip){
    bot.mixer=new THREE.AnimationMixer(rig);
@@ -289,6 +290,20 @@ function botUpdate(b,dt){
  const los=lineOfSight(b);
  b.time+=dt;b.turnAt-=dt;
  if(b.turnAt<0){b.turnAt=rnd(1.2,3.6);b.strafe*=-1}
+
+ // Spot a new target only in the front field of view. Once spotted, keep
+ // tracking the player regardless of movement/strafe direction. Retain the
+ // last known target heading briefly after line of sight breaks.
+ const initialFacing= Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
+ const withinRange=distance<23;
+ const canSee=withinRange&&los&&
+   (initialFacing>=Math.cos(75*Math.PI/180)||b.time<b.engagedUntil);
+ if(canSee){
+   b.engagedUntil=b.time+2.0;
+   b.lastKnownX=PLAYER.x;b.lastKnownZ=PLAYER.z;
+ }
+ const tracking=b.time<b.engagedUntil;
+
  let vx=0,vz=0;
  if(distance>6){vx+=dirX;vz+=dirZ}
  else if(distance<3.1){vx-=dirX*.75;vz-=dirZ*.75}
@@ -301,20 +316,23 @@ function botUpdate(b,dt){
  const walkedX=b.x-prevX,walkedZ=b.z-prevZ;
  b.moving=Math.hypot(walkedX,walkedZ)>.0005;
  b.holder.position.set(b.x,0,b.z);
- if(b.moving){
-   const targetAngle=Math.atan2(walkedX,walkedZ);
-   const difference=Math.atan2(Math.sin(targetAngle-b.body.rotation.y),Math.cos(targetAngle-b.body.rotation.y));
-   if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
-   else b.body.rotation.y+=difference*Math.min(1,dt*12);
+
+ // While attacking, the torso always turns toward the target, even when
+ // strafing or retreating. Outside combat, face the movement direction.
+ if(tracking||b.moving){
+   const aimX=(canSee?PLAYER.x:b.lastKnownX)-b.x;
+   const aimZ=(canSee?PLAYER.z:b.lastKnownZ)-b.z;
+   const aimDistance=Math.hypot(aimX,aimZ);
+   if(!tracking||aimDistance>.01){
+     const targetAngle=tracking?Math.atan2(aimX,aimZ):Math.atan2(walkedX,walkedZ);
+     const difference=Math.atan2(Math.sin(targetAngle-b.body.rotation.y),Math.cos(targetAngle-b.body.rotation.y));
+     if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
+     else b.body.rotation.y+=difference*Math.min(1,dt*(tracking?9:12));
+   }
  }
- // Enemies see only within their front 150-degree field of view AND clear LOS.
- const forwardX=Math.sin(b.body.rotation.y),forwardZ=Math.cos(b.body.rotation.y);
- const towardX=(PLAYER.x-b.x)/distance,towardZ=(PLAYER.z-b.z)/distance;
- const facingDot=forwardX*towardX+forwardZ*towardZ;
- const canSee=distance<23&&los&&facingDot>=Math.cos(75*Math.PI/180);
+
  advanceEnemyWeaponState(b,canSee,dt);
- // Animation FBX clips are optional; never let a broken pose update
- // interrupt the game loop or repeatedly throw on every frame.
+ // Animation errors should never break the game loop.
  if(!b.animationFailed){
    try{
      animateEnemyWeapon(b,dt);
@@ -328,13 +346,15 @@ function botUpdate(b,dt){
    if(b.action)b.action.timeScale=b.moving?1:0;
    if(b.mixer)b.mixer.update(dt);
  }
- // No shots until the full one-second draw has completed. Also retain the
- // tighter shooting cone so an enemy can't fire backward or sideways.
- const canFire=canSee&&facingDot>=Math.cos(55*Math.PI/180)&&b.drawProgress>=.999;
+
+ // Shooting requires clear sight, a completed draw, and the gun actually
+ // pointing toward the player. Tracking never allows shots through cover.
+ const facingDot=Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
+ const canFire=canSee&&facingDot>=Math.cos(25*Math.PI/180)&&b.drawProgress>=.999;
  b.shootDelay-=dt;
  if(canFire&&b.shootDelay<0){
    b.shootDelay=setting.fireRate*rnd(.78,1.45);
-   b.shootAnim=SHOOT_SECONDS; // Play the real shooting animation on the character.
+   b.shootAnim=SHOOT_SECONDS; // Play the character's real firing animation.
    if(Math.random()<setting.accuracy){
      if(!infiniteHealth){
        health=Math.max(0,health-setting.damage);
