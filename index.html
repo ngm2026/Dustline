@@ -139,21 +139,19 @@ function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collid
 // No fake gun or extra character model is created.
 const SHOOT_SECONDS=.38;
 const DRAW_SECONDS=1.0;
-const DRAW_HOLD_FRACTION=.30; // Raised-arm keyframe of Drawing Gun FBX, on the character's local -Z front.
+const DRAW_HOLD_FRACTION=.30; // The hand-up peak of the user's Drawing_Gun_Animation.fbx.
 const HOLSTER_AFTER_SECONDS=5.0;
 function advanceEnemyWeaponState(b,canSee,dt){
+ // Every enemy ALWAYS keeps the screenshot's raised-hand guard pose.
+ // Preserve the original 1-second reaction delay as invisible AI readiness
+ // rather than lowering/raising the arms every time the player is spotted.
+ b.weaponState='guard';
  if(canSee){
    b.unseenFor=0;
-   if(b.drawProgress<1){
-     b.drawProgress=Math.min(1,b.drawProgress+dt/DRAW_SECONDS);
-     b.weaponState=b.drawProgress>=1?'armed':'drawing';
-   }else b.weaponState='armed';
+   b.readyProgress=Math.min(1,b.readyProgress+dt/DRAW_SECONDS);
  }else{
    b.unseenFor+=dt;
-   if(b.unseenFor>=HOLSTER_AFTER_SECONDS){
-     b.drawProgress=Math.max(0,b.drawProgress-dt/DRAW_SECONDS);
-     b.weaponState=b.drawProgress>0?'holstering':'holstered';
-   }
+   if(b.unseenFor>=HOLSTER_AFTER_SECONDS)b.readyProgress=0;
  }
  b.shootAnim=Math.max(0,b.shootAnim-dt);
 }
@@ -184,11 +182,13 @@ function animateEnemyWeapon(b,dt){
  if(b.action)b.action.timeScale=b.moving?1:0;
  if(b.mixer)b.mixer.update(dt);
 
- // Hold the actual raised-gun keyframe between shots; reverse it for holstering.
- if(b.drawProgress>0&&b.drawPose.length){
-   const drawTime=b.drawProgress*DRAW_HOLD_FRACTION*drawClip.duration;
+ // FIXED GUARD STANCE: always apply the exact same upper-body frame
+ // from the original draw FBX. Walking can still animate the legs, and
+ // shooting temporarily overrides arms before they return to this pose.
+ if(drawClip&&b.drawPose.length){
+   const guardTime=DRAW_HOLD_FRACTION*drawClip.duration;
    for(const channel of b.drawPose)
-     channel.bone.quaternion.fromArray(channel.sampler.evaluate(drawTime));
+     channel.bone.quaternion.fromArray(channel.sampler.evaluate(guardTime));
  }
 
  if(b.shootAnim>0&&b.shootPose.length){
@@ -239,8 +239,8 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,
   mixer:null,drawPose:[],shootPose:[],
   shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
-  moving:true,drawProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
-  weaponState:'holstered',shootAnim:0,
+  moving:true,readyProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
+  weaponState:'guard',shootAnim:0,
   engagedUntil:0,lastKnownX:x,lastKnownZ:z
  };hit.userData.bot=bot;hit.name='DUSTLINE_ENEMY_HITBOX';
  if(walkingClip){
@@ -365,7 +365,7 @@ function botUpdate(b,dt){
  // Shooting requires clear sight, a completed draw, and the gun actually
  // pointing toward the player. Tracking never allows shots through cover.
  const facingDot=Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
- const canFire=canSee&&facingDot>=Math.cos(25*Math.PI/180)&&b.drawProgress>=.999;
+ const canFire=canSee&&facingDot>=Math.cos(25*Math.PI/180)&&b.readyProgress>=.999;
  b.shootDelay-=dt;
  if(canFire&&b.shootDelay<0){
    b.shootDelay=setting.fireRate*rnd(.78,1.45);
