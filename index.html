@@ -139,6 +139,7 @@ function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collid
 // No fake gun or extra character model is created.
 const SHOOT_SECONDS=.38;
 const DRAW_SECONDS=1.0;
+const DRAW_HOLD_FRACTION=.5; // Raised, gun-up peak of Drawing_Gun_Animation.fbx.
 const HOLSTER_AFTER_SECONDS=5.0;
 function advanceEnemyWeaponState(b,canSee,dt){
  if(canSee){
@@ -169,7 +170,10 @@ function animateEnemyWeapon(b,dt){
    progress=1-b.shootAnim/SHOOT_SECONDS;
  }else if(b.drawProgress>0&&b.drawAction){
    active=b.drawAction;
-   progress=b.drawProgress;  // The same clip reversed when holstering.
+   // Draw only as far as the gun-up peak, then HOLD that exact pose
+   // between shots (and while temporarily out of sight). After 5 seconds
+   // unseen, drawProgress decreases, reversing back to the holster pose.
+   progress=b.drawProgress*DRAW_HOLD_FRACTION;
  }
  if(!active)return;
  if(b.drawAction)b.drawAction.setEffectiveWeight(active===b.drawAction?1:0);
