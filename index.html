@@ -139,7 +139,7 @@ function tryMove(obj,dx,dz,r){if(!collide(obj.x+dx,obj.z,r))obj.x+=dx;if(!collid
 // No fake gun or extra character model is created.
 const SHOOT_SECONDS=.38;
 const DRAW_SECONDS=1.0;
-const DRAW_HOLD_FRACTION=.30; // Inspected FBX: right-arm lift peaks near frame 18 / 60, NOT at the midpoint.
+const DRAW_HOLD_FRACTION=.30; // Raised-arm keyframe of Drawing Gun FBX, on the character's local -Z front.
 const HOLSTER_AFTER_SECONDS=5.0;
 function advanceEnemyWeaponState(b,canSee,dt){
  if(canSee){
@@ -173,33 +173,33 @@ function buildFBXPoseSampler(clip,rig){
    const bone=bones.get(poseBoneId(boneName));
    if(!bone)continue;
    const sampler=track.createInterpolant();
-   // The firing FBX starts in a different base pose; its recoil should be
-   // a change RELATIVE to that first frame, not a replacement for gun-up.
-   const startInverse=new THREE.Quaternion().fromArray(sampler.evaluate(0)).invert();
-   channels.push({bone,sampler,startInverse});
+   // Match the FBX bone with the original character rig.
+   channels.push({bone,sampler});
  }
  return channels;
 }
-const recoilDelta=new THREE.Quaternion();
+const shootingPoseQuat=new THREE.Quaternion();
 function animateEnemyWeapon(b,dt){
- // The base walking animation runs normally and updates the character's legs.
+ // Walking owns the legs. Apply FBX weapon keyframes after the walking mixer.
  if(b.action)b.action.timeScale=b.moving?1:0;
  if(b.mixer)b.mixer.update(dt);
- // Draw up to the actual raised-arm peak, hold there between shots,
- // then reverse back along those SAME keyframes after 5 seconds unseen.
+
+ // Hold the actual raised-gun keyframe between shots; reverse it for holstering.
  if(b.drawProgress>0&&b.drawPose.length){
-   const time=b.drawProgress*DRAW_HOLD_FRACTION*drawClip.duration;
-   for(const channel of b.drawPose){
-     channel.bone.quaternion.fromArray(channel.sampler.evaluate(time));
-   }
+   const drawTime=b.drawProgress*DRAW_HOLD_FRACTION*drawClip.duration;
+   for(const channel of b.drawPose)
+     channel.bone.quaternion.fromArray(channel.sampler.evaluate(drawTime));
  }
+
  if(b.shootAnim>0&&b.shootPose.length){
-   // Apply only the shooting recoil over the held gun-up draw pose.
-   const shotTime=clamp(1-b.shootAnim/SHOOT_SECONDS,0,1)*shootClip.duration;
+   // The shooting clip begins from its own aimed pose. Blend into the actual
+   // shooting frames and back; do NOT apply a tiny offset behind the enemy.
+   const progress=clamp(1-b.shootAnim/SHOOT_SECONDS,0,1);
+   const weight=Math.max(0,Math.min(1,progress/.14,(1-progress)/.22));
+   const time=progress*shootClip.duration;
    for(const channel of b.shootPose){
-     recoilDelta.fromArray(channel.sampler.evaluate(shotTime));
-     recoilDelta.premultiply(channel.startInverse);
-     channel.bone.quaternion.multiply(recoilDelta).normalize();
+     shootingPoseQuat.fromArray(channel.sampler.evaluate(time));
+     channel.bone.quaternion.slerp(shootingPoseQuat,weight).normalize();
    }
  }
 }
@@ -308,7 +308,7 @@ function botUpdate(b,dt){
  // Spot a new target only in the front field of view. Once spotted, keep
  // tracking the player regardless of movement/strafe direction. Retain the
  // last known target heading briefly after line of sight breaks.
- const initialFacing= Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
+ const initialFacing=-Math.sin(b.body.rotation.y)*dirX-Math.cos(b.body.rotation.y)*dirZ;
  const withinRange=distance<23;
  const canSee=withinRange&&los&&
    (initialFacing>=Math.cos(75*Math.PI/180)||b.time<b.engagedUntil);
@@ -338,7 +338,8 @@ function botUpdate(b,dt){
    const aimZ=(canSee?PLAYER.z:b.lastKnownZ)-b.z;
    const aimDistance=Math.hypot(aimX,aimZ);
    if(!tracking||aimDistance>.01){
-     const targetAngle=tracking?Math.atan2(aimX,aimZ):Math.atan2(walkedX,walkedZ);
+     // The original Mixamo character and weapon animations face local -Z.
+     const targetAngle=(tracking?Math.atan2(aimX,aimZ):Math.atan2(walkedX,walkedZ))+Math.PI;
      const difference=Math.atan2(Math.sin(targetAngle-b.body.rotation.y),Math.cos(targetAngle-b.body.rotation.y));
      if(!b.hasMovementHeading){b.body.rotation.y=targetAngle;b.hasMovementHeading=true}
      else b.body.rotation.y+=difference*Math.min(1,dt*(tracking?9:12));
@@ -363,7 +364,7 @@ function botUpdate(b,dt){
 
  // Shooting requires clear sight, a completed draw, and the gun actually
  // pointing toward the player. Tracking never allows shots through cover.
- const facingDot=Math.sin(b.body.rotation.y)*dirX+Math.cos(b.body.rotation.y)*dirZ;
+ const facingDot=-Math.sin(b.body.rotation.y)*dirX-Math.cos(b.body.rotation.y)*dirZ;
  const canFire=canSee&&facingDot>=Math.cos(25*Math.PI/180)&&b.drawProgress>=.999;
  b.shootDelay-=dt;
  if(canFire&&b.shootDelay<0){
