@@ -22,6 +22,11 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 #overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:flex-start;background:linear-gradient(90deg,#07141ce6,#07141cce 46%,#07141c88);padding:5vw;overflow:auto}
 .panel{width:min(515px,94vw);padding:26px 28px;background:#0c1d2bdf;border:1px solid #8db4bb44;box-shadow:0 25px 80px #08131caa}h1{font-size:clamp(54px,7vw,85px);line-height:0.9;margin:14px 0 16px;letter-spacing:-.055em;font-weight:1000}h1 span{color:var(--accent)}p{line-height:1.55;color:#bccfd7;font-size:14px}small{color:#aabfc5}#status{padding:12px 13px;margin-top:16px;color:#dcf1eb;background:#243e46a9;border:1px solid #4b827d77;font-weight:700;font-size:12px;line-height:1.45;word-break:break-word}.eyebrow{letter-spacing:.21em;color:var(--cyan);font-size:11px;font-weight:900}.diffrow{display:flex;gap:8px;margin:17px 0 8px}.diffrow button{flex:1;min-width:0;border:1px solid #91aab055;padding:13px 7px;color:#dbeaf0;background:#182c3b;font-weight:900;letter-spacing:.08em}.diffrow button.active{border-color:var(--accent);background:#57442e;color:#fff3d7}.primary{margin-top:12px;width:100%;padding:18px;border:0;background:var(--accent);color:#111b20;font-weight:1000;letter-spacing:.13em;font-size:14px}.primary:disabled{opacity:.55;cursor:not-allowed}.secondary{margin-top:8px;width:100%;padding:12px;background:transparent;border:1px solid #60828b;color:#c0d9e0;font-weight:800}.foot{font-size:11px;color:#93aab4;line-height:1.6;margin-top:14px}.foot a{color:#86dae7;text-decoration:underline}#endstats{font-weight:900;color:var(--accent);font-size:24px;margin:16px 0}
 #settingsPanel{max-height:86vh;overflow-y:auto}
+#thankYouPanel{max-height:86vh;overflow-y:auto}
+.thank-you-text{font-size:19px;line-height:1.65;color:#edf3f2;margin:25px 0 22px}
+.thank-you-text strong{color:var(--accent)}
+.thank-you-links{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 22px}
+.thank-you-links a{color:#86dae7;font-size:13px;font-weight:800;text-underline-offset:3px}
 .settings-row{margin:20px 0 22px}
 .settings-title{display:flex;justify-content:space-between;font-weight:850;font-size:13px;margin-bottom:10px}
 .settings-title output{font-weight:900;color:var(--accent)}
@@ -45,7 +50,13 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div class="settings-row"><label class="settings-title" for="sensitivitySlider">MOUSE SENSITIVITY <output id="sensitivityValue">1.0×</output></label><input class="settings-range" type="range" id="sensitivitySlider" min="0.2" max="3" step="0.1" value="1"><div class="settings-note">How fast your view turns with the mouse.</div></div>
 <div class="settings-row"><label class="settings-title" for="fovSlider">FIELD OF VIEW <output id="fovValue">78°</output></label><input class="settings-range" type="range" id="fovSlider" min="60" max="110" step="1" value="78"><div class="settings-note">Higher FOV shows more of the arena. Right-click zoom still works.</div></div>
 <div class="settings-row"><label class="settings-check"><input type="checkbox" id="cheatsToggle"> ENABLE CHEATS</label><div class="settings-note">With cheats enabled, press P during gameplay to turn infinite health on or off. Disabling cheats turns it off.</div></div>
+<button class="secondary" id="openThankYou">THANK YOU / CREDITS ★</button>
 <button class="primary" id="settingsBack">BACK ▶</button>
+</div><div class="panel" id="thankYouPanel" style="display:none">
+<div class="eyebrow">// SPECIAL THANKS</div><h1>THANK <span>YOU.</span></h1>
+<p class="thank-you-text">Thank you to <strong>TORI106</strong> on SketchFab for gun models &amp; the people at <strong>Mixamo</strong> for animations and skeletons!</p>
+<div class="thank-you-links"><a href="https://sketchfab.com/" target="_blank" rel="noopener noreferrer">Sketchfab</a><a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer">Mixamo</a></div>
+<button class="primary" id="thankYouBack">BACK TO SETTINGS ▶</button>
 </div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">// MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · loading models</div>
 
 
@@ -83,7 +94,7 @@ function makePlaceholderEnemy(){
 }
 const ray=new THREE.Raycaster();ray.far=95;const UP=new THREE.Vector3(0,1,0);const rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),v3=new THREE.Vector3();
 function say(str,secs=2){$('message').textContent=str;$('message').style.opacity=1;toastTimer=secs}
-function setPanel(which){document.body.classList.toggle('in-game',!which);$('settingsPanel').style.display=which==='settings'?'block':'none';$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which?'none':'block'}
+function setPanel(which){document.body.classList.toggle('in-game',!which);$('settingsPanel').style.display=which==='settings'?'block':'none';$('thankYouPanel').style.display=which==='thankyou'?'block':'none';$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which?'none':'block'}
 function updateSettingsUI(){
  $('sensitivitySlider').value=mouseSensitivity;$('sensitivityValue').textContent=mouseSensitivity.toFixed(1)+'×';
  $('fovSlider').value=baseFov;$('fovValue').textContent=baseFov+'°';
@@ -102,6 +113,8 @@ function closeSettings(){
 $('openSettingsMenu').onclick=()=>openSettings('menu');
 $('openSettingsPause').onclick=()=>openSettings('pause');
 $('settingsBack').onclick=closeSettings;
+$('openThankYou').onclick=()=>setPanel('thankyou');
+$('thankYouBack').onclick=()=>setPanel('settings');
 $('sensitivitySlider').addEventListener('input',e=>{
  mouseSensitivity=clamp(Number(e.target.value),.2,3);
  $('sensitivityValue').textContent=mouseSensitivity.toFixed(1)+'×';saveSettings();
@@ -533,6 +546,7 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
 const stage=$('stage');
 addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){
+ if($('thankYouPanel').style.display==='block'){setPanel('settings');return}
  if($('settingsPanel').style.display==='block'){closeSettings();return}
  if(mood==='playing')pause();
  else if(mood==='paused'){mood='playing';setPanel(null);requestGameMouse()}
