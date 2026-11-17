@@ -49,3 +49,19 @@ The original uploaded **W1_Stand_Aim_Jump_Start_IPC.fbx**, **W1_Stand_Aim_Jump_A
 - The jump timings can be adjusted in `JUMP_PHASE_DURATION` in `index.html`, and the actual vertical arc follows the original 7.5 initial velocity and 19.5 gravity physics
 
 **Important:** Because the supplied jump files use a different skeleton, this is a joint-rotation retarget and resampled approximation, not full original FBX playback. The transfer and timing passed code/data checks, but the final animation and grip alignment still need a two-browser visual test.
+
+## Idle and stationary left/right turns (MoCap Online Free Pistol Animation Pack)
+
+The following user-supplied binary FBXs were parsed, sampled, and retargeted into `assets/animations/stand_poses.js` without requiring an additional manual GitHub upload:
+
+- `W1_Stand_Aim_Idle_IPC.fbx`: 2-second loop, 21 resampled pose frames; shown when a remote multiplayer player stands still
+- `W1_Stand_Aim_Turn_In_Place_L_Loop_IPC.fbx`: 0.667-second loop, 13 resampled pose frames; shown when the remote player stands still and turns left using their mouse or horizontal-look controls
+- `W1_Stand_Aim_Turn_In_Place_R_Loop_IPC.fbx`: 0.667-second loop, 13 resampled pose frames; same for turning right
+
+All three use the uploaded **MotusMan** skeleton. Their 22 mapped body-joint rotations were sampled **relative to the common starting idle pose** and blended onto the existing Mixamo body, so the current character and gun models are not replaced. The turn animations include the legs, spine, arms, and wrists. Smooth blending is applied when stopping, beginning to turn, and resuming movement. Both idle and turns preserve the player's real textured pistol: the gun's grip remains at the animated hand, and its orientation follows the wrist.
+
+**Animation priority:** jumping (Start / Air / End) takes precedence, then normal walking while moving, then idle / turning while stationary. The existing firing animation overlays all of those states when the player shoots.
+
+Turn direction is detected from changes in local camera yaw, encoded in the existing 20 Hz WebRTC player-state messages. Positional movement and facing are still controlled by the networked state, not by root motion in the animation FBXs. These clips are **source-derived resampled retargets**, not byte-for-byte FBX animation playback.
+
+MoCap Online is thanked in DUSTLINE's **Settings → Thank You / Credits** screen for its **Free Pistol Animation Pack**. Source animation and texture alignment should still be reviewed in a live two-player visual test.
