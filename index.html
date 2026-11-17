@@ -103,10 +103,11 @@ import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {JUMP_BONES,decodeJumpClips} from './assets/animations/jump_poses.js';
+import {decodeStandClips} from './assets/animations/stand_poses.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 
 const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
-let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,pistolTemplate=null,jumpClipData=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
+let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,pistolTemplate=null,jumpClipData=null,standClipData=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
@@ -392,6 +393,49 @@ function applyJumpPose(b){
    binding.bone.quaternion.copy(binding.base).premultiply(jumpQuatA).normalize();
  }
 }
+// Source-derived MoCap Online idle / left-turn / right-turn poses.
+// Keep the original Mixamo rig. Body/world yaw remains driven by WebRTC.
+const standQIdle=new THREE.Quaternion(),standQTurn=new THREE.Quaternion();
+const standQNext=new THREE.Quaternion(),standQTarget=new THREE.Quaternion();
+function sampleStandDelta(clip,frame,bone,out){
+ const a=Math.floor(frame),b=Math.min(clip.frames-1,a+1),f=frame-a;
+ const stride=JUMP_BONES.length*4;
+ out.fromArray(clip.values,a*stride+bone*4).normalize();
+ if(f>.00001){
+   standQNext.fromArray(clip.values,b*stride+bone*4).normalize();
+   out.slerp(standQNext,f);
+ }
+ return out;
+}
+function applyStandingAnimations(b,dt){
+ if(!standClipData||!b.jumpBones)return;
+ const groundedStill=!b.moving&&!b.jumpStage;
+ // Ramp out when walking and in when idle so feet don't snap to rest.
+ b.standBlend=clamp(b.standBlend+(groundedStill?1:-1)*dt*10,0,1);
+ if(b.standBlend<=0)return;
+ const idle=standClipData.idle;
+ b.idlePhase=(b.idlePhase+dt)%idle.duration;
+ const turning=groundedStill&&b.turnDir!==0;
+ if(turning){
+   if(b.lastTurnDir!==b.turnDir){b.turnPhase=0;b.lastTurnDir=b.turnDir}
+   const clip=b.turnDir>0?standClipData.turnL:standClipData.turnR;
+   b.turnPhase=(b.turnPhase+dt)%clip.duration;
+ }
+ b.turnBlend=clamp(b.turnBlend+(turning?1:-1)*dt*12,0,1);
+ const turn=b.lastTurnDir>0?standClipData.turnL:standClipData.turnR;
+ const idleFrame=b.idlePhase/idle.duration*(idle.frames-1);
+ const turnFrame=b.turnPhase/turn.duration*(turn.frames-1);
+ for(let i=0;i<b.jumpBones.length;i++){
+   const binding=b.jumpBones[i];if(!binding)continue;
+   sampleStandDelta(idle,idleFrame,i,standQIdle);
+   if(b.turnBlend>.0001){
+     sampleStandDelta(turn,turnFrame,i,standQTurn);
+     standQIdle.slerp(standQTurn,b.turnBlend);
+   }
+   standQTarget.copy(binding.base).premultiply(standQIdle).normalize();
+   binding.bone.quaternion.slerp(standQTarget,b.standBlend);
+ }
+}
 const shootingPoseQuat=new THREE.Quaternion();
 function animateEnemyWeapon(b,dt){
  // Walking owns the legs. Apply FBX weapon keyframes after the walking mixer.
@@ -404,6 +448,7 @@ function animateEnemyWeapon(b,dt){
  for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
  // Three-stage jump is applied after the held-gun stance, but before firing.
  if(b.jumpStage)applyJumpPose(b);
+ else if(b.standingAvatar)applyStandingAnimations(b,dt);
 
  if(b.shootAnim>0&&b.shootPose.length){
    // The shooting clip begins from its own aimed pose. Blend into the actual
@@ -813,7 +858,8 @@ function pvpCreateOpponent(){
    guardPose:buildGuardPose(rig),shootPose:buildFBXPoseSampler(shootClip,rig),
    shootAnim:0,moving:false,weaponState:'guard',pistol:null,rightHand:null,
    targetX:pos.x,targetZ:pos.z,targetY:0,targetYaw:pos.yaw,animationFailed:false,
-   jumpStage:null,jumpProgress:0,jumpBones:null};
+   jumpStage:null,jumpProgress:0,jumpBones:null,standingAvatar:true,
+   idlePhase:0,turnPhase:0,turnDir:0,lastTurnDir:0,turnBlend:0,standBlend:0};
  rig.traverse(obj=>{if(obj.isBone&&poseBoneId(obj.name)==='righthand')bot.rightHand=obj});
  bot.jumpBones=buildJumpBindings(rig,bot.guardPose);
  if(walkingClip){
@@ -1088,6 +1134,8 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  // Retarget the three user-provided jumping FBXs, baked into a compact module.
  try{jumpClipData=await decodeJumpClips();console.info('DUSTLINE: jump start, air and landing poses ready')}
  catch(error){jumpClipData=null;console.warn('DUSTLINE: jump poses unavailable; jumping height still works',error)}
+ try{standClipData=await decodeStandClips();console.info('DUSTLINE: MoCap idle and turn-in-place loops ready')}
+ catch(error){standClipData=null;console.warn('DUSTLINE: idle and turning poses unavailable',error)}
  log('Loading textured enemy pistol…');
  const pistolLoaded=await loadPistolModel();
  if(!pistolLoaded)console.warn('Upload pistol.glb to the GitHub repository root to enable enemy handguns.');
