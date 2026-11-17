@@ -34,7 +34,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 .settings-note{font-size:11px;color:#adc4cc;line-height:1.55;margin-top:8px}
 .settings-check{display:flex;align-items:center;gap:12px;padding:14px;background:#172b37;border:1px solid #466471;cursor:pointer;font-size:14px;font-weight:800}
 .settings-check input{width:21px;height:21px;accent-color:#e6ad5e}
-#godIndicator{display:none;color:#ffdd8d;font-weight:900}
+#godIndicator{display:none;color:#ffdd8d;font-weight:900}#aiFrozenIndicator{display:none;color:#9bf0ff;font-weight:900}
 #loader{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:white;z-index:13;font-size:11px;text-shadow:0 1px 6px #000;font-weight:700}
 @media(max-width:670px){.panel{padding:18px}#topbar{left:12px;right:12px}#bottom{left:12px;bottom:8px;gap:5px}.metric{padding:9px;min-width:85px}.metric .n{font-size:24px}.brand{font-size:14px}#tips{display:none}#weaponView{width:75vw;height:45vw}.stat{margin-left:5px}.stat b{font-size:16px}}
 </style>
@@ -44,12 +44,12 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div id="stage"></div><div id="vignette"></div><div id="damage"></div>
 <div id="weaponView"></div><div id="flash"></div>
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
-<div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span>WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT · RIGHT CLICK AIM / ZOOM<br/>R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
+<div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span><span id="aiFrozenIndicator"> ❄ AI FROZEN (O TO UNFREEZE)</span>WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT · RIGHT CLICK AIM / ZOOM<br/>R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
 <div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena. Enemies hold the final-frame guard pose, track you in combat, and play the real FBX firing animation. The textured 9mm pistol model appears while holding or shooting, not during the draw animation.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><button class="secondary" id="openSettingsMenu">SETTINGS ⚙</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot · Right-click to aim and zoom · Space to jump. Requires internet for Three.js. Enemy pistol model: <a href="https://sketchfab.com/3d-models/9mm-pistol-43bc09f5aace4346a8a2b6e1580fc03f" target="_blank" rel="noopener noreferrer">9mm Pistol by TORI106</a> on Sketchfab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="openSettingsPause">SETTINGS ⚙</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="settingsPanel" style="display:none">
 <div class="eyebrow">// CONTROL & GAMEPLAY OPTIONS</div><h1>SETTINGS<span>.</span></h1>
 <div class="settings-row"><label class="settings-title" for="sensitivitySlider">MOUSE SENSITIVITY <output id="sensitivityValue">1.0×</output></label><input class="settings-range" type="range" id="sensitivitySlider" min="0.2" max="3" step="0.1" value="1"><div class="settings-note">How fast your view turns with the mouse.</div></div>
 <div class="settings-row"><label class="settings-title" for="fovSlider">FIELD OF VIEW <output id="fovValue">78°</output></label><input class="settings-range" type="range" id="fovSlider" min="60" max="110" step="1" value="78"><div class="settings-note">Higher FOV shows more of the arena. Right-click zoom still works.</div></div>
-<div class="settings-row"><label class="settings-check"><input type="checkbox" id="cheatsToggle"> ENABLE CHEATS</label><div class="settings-note">With cheats enabled, press P during gameplay to turn infinite health on or off. Disabling cheats turns it off.</div></div>
+<div class="settings-row"><label class="settings-check"><input type="checkbox" id="cheatsToggle"> ENABLE CHEATS</label><div class="settings-note">With cheats enabled, press P for infinite health or O to freeze/unfreeze all enemies while you can still move, aim, and shoot. Disabling cheats turns both off.</div></div>
 <button class="secondary" id="openThankYou">THANK YOU / CREDITS ★</button>
 <button class="primary" id="settingsBack">BACK ▶</button>
 </div><div class="panel" id="thankYouPanel" style="display:none">
@@ -77,7 +77,7 @@ const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
 let baseFov=clamp(Number(savedSettings.baseFov)||78,60,110);
-let cheatsEnabled=savedSettings.cheatsEnabled===true,infiniteHealth=false,settingsReturn='menu';
+let cheatsEnabled=savedSettings.cheatsEnabled===true,infiniteHealth=false,aiFrozen=false,settingsReturn='menu';
 function saveSettings(){try{localStorage.setItem(SETTINGS_STORE,JSON.stringify({mouseSensitivity,baseFov,cheatsEnabled}))}catch(e){}}
 const PLAYER={x:0,z:15,r:0.52};const keys={};const stats={easy:{speed:1.35,damage:4,fireRate:2.4,accuracy:.4},normal:{speed:2.05,damage:7,fireRate:1.6,accuracy:.66},hard:{speed:2.8,damage:11,fireRate:1.05,accuracy:.9}};
 const weapon={name:'HANDGUN',max:15,mag:15,stock:75,rate:.25,damage:43,spread:.010};
@@ -127,7 +127,7 @@ $('fovSlider').addEventListener('input',e=>{
 });
 $('cheatsToggle').addEventListener('change',e=>{
  cheatsEnabled=e.target.checked;
- if(!cheatsEnabled)infiniteHealth=false;
+ if(!cheatsEnabled){infiniteHealth=false;aiFrozen=false;}
  updateHUD();saveSettings();
 });
 updateSettingsUI();
@@ -396,7 +396,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
 function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.pistol)scene.remove(b.pistol);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
-function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
+function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('aiFrozenIndicator').style.display=aiFrozen?'block':'none';$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
 function requestGameMouse(){
  if(!renderer?.domElement||document.pointerLockElement===renderer.domElement)return;
  try{
@@ -426,7 +426,7 @@ document.addEventListener('pointerlockchange',()=>{
 });
 let hadMouseLock=false;
 function start(){if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
- mood='playing';elapsed=0;kills=0;health=100;infiniteHealth=false;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;weapon.mag=weapon.max;weapon.stock=75;spawn();setPanel(null);updateHUD();requestGameMouse();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
+ mood='playing';elapsed=0;kills=0;health=100;infiniteHealth=false;aiFrozen=false;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;weapon.mag=weapon.max;weapon.stock=75;spawn();setPanel(null);updateHUD();requestGameMouse();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
 function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
 function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause');releaseGameMouse()}
 function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
@@ -542,7 +542,9 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
    tryMove(PLAYER,(forwardX*forward+rightX*side)*speed*dt,(forwardZ*forward+rightZ*side)*speed*dt,PLAYER.r);
  }
  vY-=19.5*dt;eyeY+=vY*dt;if(eyeY<1.65){eyeY=1.65;vY=0}camera.position.set(PLAYER.x,eyeY,PLAYER.z);camera.rotation.set(pitch,yaw,0,'YXZ');
- for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
+ // The O cheat freezes enemy movement, targeting, gun/FBX animations and firing,
+ // but continues player movement, aiming, reloads, and shooting.
+ if(!aiFrozen)for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
 const stage=$('stage');
 addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){
@@ -556,6 +558,11 @@ if(e.code==='KeyP'&&cheatsEnabled){
  infiniteHealth=!infiniteHealth;
  if(infiniteHealth)health=100;
  updateHUD();say(infiniteHealth?'INFINITE HEALTH ENABLED':'INFINITE HEALTH DISABLED',2);
+ return;
+}
+if(e.code==='KeyO'&&cheatsEnabled){
+ aiFrozen=!aiFrozen;
+ updateHUD();say(aiFrozen?'ENEMY AI FROZEN — PRESS O TO RESUME':'ENEMY AI RESUMED',2);
  return;
 }
 if(e.code==='Space'&&eyeY<=1.651)vY=7.5;if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
