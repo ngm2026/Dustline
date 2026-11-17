@@ -460,7 +460,7 @@ let hadMouseLock=false;
 function start(){if(pvp.peer||pvp.remote)pvpShutdown();matchMode='solo';if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
  mood='playing';elapsed=0;kills=0;health=100;infiniteHealth=false;aiFrozen=false;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;weapon.mag=weapon.max;weapon.stock=75;spawn();setPanel(null);updateHUD();requestGameMouse();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
 function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
-function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause');releaseGameMouse()}
+function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;for(const key in keys)keys[key]=false;$('pausePanel').querySelector('p').textContent=matchMode==='pvp'?'The online match keeps running while you are paused.':'The bots and animation are stopped.';$('back').textContent=matchMode==='pvp'?'LEAVE 1V1':'MAIN MENU';setPanel('pause');releaseGameMouse()}
 function menu(){if(pvp.peer||pvp.remote)pvpShutdown();mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
 function reload(){const w=weapon;if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+1.25;say('RELOADING',.7)}
 function updateReload(){if(reloadEnd!==0&&elapsed>=reloadEnd){const w=weapon,n=Math.min(w.max-w.mag,w.stock);w.mag+=n;w.stock-=n;reloadEnd=0;updateHUD()}}
@@ -937,6 +937,9 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
  // The O cheat freezes enemy movement, targeting, gun/FBX animations and firing,
  // but continues player movement, aiming, reloads, and shooting.
  if(matchMode==='pvp')pvpTick(dt);else if(!aiFrozen)for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
+ }else if(mood==='paused'&&matchMode==='pvp'){
+   // The opponent and host's respawn clock keep advancing even if a player opens the pause menu.
+   elapsed+=dt;pvpTick(dt);updateHUD();
  }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}
  if(pvp.finished){const seconds=Math.max(0,Math.ceil((pvp.returnAt-performance.now())/1000));$('pvpReturnTimer').textContent='Returning to main menu in '+seconds+' seconds...';if(performance.now()>=pvp.returnAt)menu()}
  render(dt)}
