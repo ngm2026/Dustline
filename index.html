@@ -665,7 +665,7 @@ let pvpScriptPromise=null;
 const pvp={peer:null,conn:null,role:null,code:'',generation:0,connected:false,
  active:false,finished:false,returnAt:0,remote:null,round:1,score:{host:0,guest:0},
  health:{host:100,guest:100},nextStateAt:0,invulnerableUntil:0,lastGuestHit:-100,
- localJumpAt:-100,localJumpSeq:0};
+ localJumpAt:-100,localJumpSeq:0,lastSentYaw:0};
 function pvpSend(obj){
  if(!pvp.conn?.open)return false;
  try{pvp.conn.send(obj);return true}catch(e){console.warn('DUSTLINE network send:',e);return false}
@@ -874,12 +874,13 @@ function pvpCreateOpponent(){
 function pvpResetPositions(){
  const me=pvpSpawn(pvp.role);
  PLAYER.x=me.x;PLAYER.z=me.z;eyeY=1.65;vY=0;pvp.localJumpAt=-100;
- yaw=me.yaw;pitch=0;health=pvp.health[pvp.role];
+ yaw=me.yaw;pvp.lastSentYaw=yaw;pitch=0;health=pvp.health[pvp.role];
  weapon.mag=weapon.max;weapon.stock=75;nextShot=elapsed;reloadEnd=0;
  if(pvp.remote){
    const other=pvpSpawn(pvp.role==='host'?'guest':'host');
    Object.assign(pvp.remote,{x:other.x,z:other.z,y:0,targetX:other.x,targetZ:other.z,targetY:0,
-     targetYaw:other.yaw,shootAnim:0,moving:false,jumpStage:null,jumpProgress:0});
+     targetYaw:other.yaw,shootAnim:0,moving:false,jumpStage:null,jumpProgress:0,
+     turnDir:0,lastTurnDir:0,turnPhase:0,turnBlend:0,standBlend:0,idlePhase:0});
    pvp.remote.holder.position.set(other.x,0,other.z);
    pvp.remote.body.rotation.y=other.yaw+Math.PI;
  }
@@ -960,6 +961,10 @@ function pvpReceive(msg){
    pvp.remote.targetZ=clamp(msg.z,-25,25);
    pvp.remote.targetYaw=msg.yaw;
    pvp.remote.moving=!!msg.moving;
+   // Positive camera yaw is a left turn in DUSTLINE; ignore turning
+   // clips while walking, jumping, or when the mouse is stationary.
+   pvp.remote.turnDir=!msg.moving&&msg.jumpStage===null&&
+     (msg.turnDir===1||msg.turnDir===-1)?msg.turnDir:0;
    // The opponent's feet use the sender's physics height. The imported
    // Start/Air/End clips supply only articulation, not extra root motion.
    if(Number.isFinite(msg.y))pvp.remote.targetY=clamp(msg.y,0,1.6);
@@ -1017,9 +1022,15 @@ function pvpTick(dt){
  if(elapsed>=pvp.nextStateAt){
    pvp.nextStateAt=elapsed+.05;
    const jump=pvpLocalJumpState();
+   const moving=!!(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD);
+   const dYaw=Math.atan2(Math.sin(yaw-pvp.lastSentYaw),Math.cos(yaw-pvp.lastSentYaw));
+   pvp.lastSentYaw=yaw;
+   // At 20 position updates per second, about 0.3 degrees is enough to
+   // distinguish intentional mouse turns from floating-point jitter.
+   const turnDir=moving||jump.stage!==null?0:(dYaw>.005?1:dYaw<-.005?-1:0);
    pvpSend({type:'state',round:pvp.round,x:PLAYER.x,z:PLAYER.z,y:Math.max(0,eyeY-1.65),yaw,
      jumpStage:jump.stage,jumpProgress:jump.progress,jumpSeq:pvp.localJumpSeq,
-     moving:!!(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD)});
+     turnDir,moving});
  }
 }
 $('createLobbyButton').onclick=pvpOpenCreate;
