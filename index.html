@@ -618,7 +618,8 @@ const PVP_PEERJS_URL='https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.
 let pvpScriptPromise=null;
 const pvp={peer:null,conn:null,role:null,code:'',generation:0,connected:false,
  active:false,finished:false,returnAt:0,remote:null,round:1,score:{host:0,guest:0},
- health:{host:100,guest:100},nextStateAt:0,invulnerableUntil:0,lastGuestHit:-100};
+ health:{host:100,guest:100},nextStateAt:0,invulnerableUntil:0,lastGuestHit:-100,
+ localJumpAt:-100,localJumpSeq:0};
 function pvpSend(obj){
  if(!pvp.conn?.open)return false;
  try{pvp.conn.send(obj);return true}catch(e){console.warn('DUSTLINE network send:',e);return false}
@@ -769,6 +770,18 @@ async function pvpJoinRoom(){
 function pvpSpawn(role){
  return role==='host'?{x:0,z:20,yaw:0}:{x:0,z:-23.4,yaw:Math.PI};
 }
+// Match existing local jump physics without adding a second displacement
+// animation: Start on take-off, Air while rising/falling, End on landing.
+function pvpLocalJumpState(){
+ const age=elapsed-pvp.localJumpAt;
+ if(age<0||age>JUMP_FLIGHT_SECONDS+JUMP_PHASE_DURATION.end)return {stage:null,progress:0};
+ if(eyeY>1.651){
+   if(age<JUMP_PHASE_DURATION.start)
+     return {stage:'start',progress:clamp(age/JUMP_PHASE_DURATION.start,0,1)};
+   return {stage:'air',progress:clamp((age-JUMP_PHASE_DURATION.start)/(JUMP_FLIGHT_SECONDS-JUMP_PHASE_DURATION.start),0,1)};
+ }
+ return {stage:'end',progress:clamp((age-JUMP_FLIGHT_SECONDS)/JUMP_PHASE_DURATION.end,0,1)};
+}
 function pvpRemoveBots(){
  for(const bot of enemies){
    scene.remove(bot.holder);
@@ -813,13 +826,13 @@ function pvpCreateOpponent(){
 }
 function pvpResetPositions(){
  const me=pvpSpawn(pvp.role);
- PLAYER.x=me.x;PLAYER.z=me.z;eyeY=1.65;vY=0;
+ PLAYER.x=me.x;PLAYER.z=me.z;eyeY=1.65;vY=0;pvp.localJumpAt=-100;
  yaw=me.yaw;pitch=0;health=pvp.health[pvp.role];
  weapon.mag=weapon.max;weapon.stock=75;nextShot=elapsed;reloadEnd=0;
  if(pvp.remote){
    const other=pvpSpawn(pvp.role==='host'?'guest':'host');
-   Object.assign(pvp.remote,{x:other.x,z:other.z,targetX:other.x,targetZ:other.z,
-     targetYaw:other.yaw,shootAnim:0,moving:false});
+   Object.assign(pvp.remote,{x:other.x,z:other.z,y:0,targetX:other.x,targetZ:other.z,targetY:0,
+     targetYaw:other.yaw,shootAnim:0,moving:false,jumpStage:null,jumpProgress:0});
    pvp.remote.holder.position.set(other.x,0,other.z);
    pvp.remote.body.rotation.y=other.yaw+Math.PI;
  }
@@ -831,6 +844,7 @@ function pvpStart(){
  matchMode='pvp';pvp.active=true;pvp.finished=false;
  pvp.score={host:0,guest:0};pvp.health={host:100,guest:100};
  pvp.round=1;pvp.invulnerableUntil=1.3;pvp.lastGuestHit=-100;pvp.nextStateAt=0;
+ pvp.localJumpSeq=0;pvp.localJumpAt=-100;
  mood='playing';elapsed=0;kills=0;infiniteHealth=false;aiFrozen=false;
  rightHeld=false;shootHeld=false;recoil=0;aimAmount=0;
  pvp.remote=pvpCreateOpponent();pvpResetPositions();
@@ -899,6 +913,17 @@ function pvpReceive(msg){
    pvp.remote.targetZ=clamp(msg.z,-25,25);
    pvp.remote.targetYaw=msg.yaw;
    pvp.remote.moving=!!msg.moving;
+   // The opponent's feet use the sender's physics height. The imported
+   // Start/Air/End clips supply only articulation, not extra root motion.
+   if(Number.isFinite(msg.y))pvp.remote.targetY=clamp(msg.y,0,1.6);
+   if(['start','air','end'].includes(msg.jumpStage)&&Number.isFinite(msg.jumpProgress)){
+     const same=pvp.remote.jumpStage===msg.jumpStage;
+     pvp.remote.jumpStage=msg.jumpStage;
+     const t=clamp(msg.jumpProgress,0,1);
+     pvp.remote.jumpProgress=same?Math.max(pvp.remote.jumpProgress,t):t;
+   }else if(msg.jumpStage===null){
+     pvp.remote.jumpStage=null;pvp.remote.jumpProgress=0;
+   }
    return;
  }
  if(msg.type==='shot'&&pvp.active&&msg.round===pvp.round){
@@ -930,7 +955,9 @@ function pvpTick(dt){
  if(b){
    const t=Math.min(1,dt*15);
    b.x+=(b.targetX-b.x)*t;b.z+=(b.targetZ-b.z)*t;
-   b.holder.position.set(b.x,0,b.z);
+   b.y+=(b.targetY-b.y)*Math.min(1,dt*18);
+   b.holder.position.set(b.x,b.y,b.z);
+   if(b.jumpStage)b.jumpProgress=clamp(b.jumpProgress+dt/JUMP_PHASE_DURATION[b.jumpStage],0,1);
    const a=b.targetYaw+Math.PI;
    const diff=Math.atan2(Math.sin(a-b.body.rotation.y),Math.cos(a-b.body.rotation.y));
    b.body.rotation.y+=diff*Math.min(1,dt*15);
@@ -942,7 +969,9 @@ function pvpTick(dt){
  }
  if(elapsed>=pvp.nextStateAt){
    pvp.nextStateAt=elapsed+.05;
-   pvpSend({type:'state',round:pvp.round,x:PLAYER.x,z:PLAYER.z,yaw,
+   const jump=pvpLocalJumpState();
+   pvpSend({type:'state',round:pvp.round,x:PLAYER.x,z:PLAYER.z,y:Math.max(0,eyeY-1.65),yaw,
+     jumpStage:jump.stage,jumpProgress:jump.progress,jumpSeq:pvp.localJumpSeq,
      moving:!!(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD)});
  }
 }
@@ -1009,7 +1038,7 @@ if(e.code==='KeyO'&&cheatsEnabled&&matchMode==='solo'){
  updateHUD();say(aiFrozen?'ENEMY AI FROZEN — PRESS O TO RESUME':'ENEMY AI RESUMED',2);
  return;
 }
-if(e.code==='Space'&&eyeY<=1.651)vY=7.5;if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
+if(e.code==='Space'&&eyeY<=1.651){vY=JUMP_UP_VELOCITY;if(matchMode==='pvp'){pvp.localJumpAt=elapsed;pvp.localJumpSeq++}}if(e.code==='KeyR')reload()});addEventListener('keyup',e=>{keys[e.code]=false});addEventListener('blur',()=>{shootHeld=false;rightHeld=false;for(const k in keys)keys[k]=false});
 stage.addEventListener('contextmenu',e=>e.preventDefault());
 stage.addEventListener('mousedown',e=>{
  if(mood!=='playing')return;
