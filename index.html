@@ -35,6 +35,12 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 .settings-check{display:flex;align-items:center;gap:12px;padding:14px;background:#172b37;border:1px solid #466471;cursor:pointer;font-size:14px;font-weight:800}
 .settings-check input{width:21px;height:21px;accent-color:#e6ad5e}
 #godIndicator{display:none;color:#ffdd8d;font-weight:900}#aiFrozenIndicator{display:none;color:#9bf0ff;font-weight:900}
+.lobby-code{font-size:clamp(34px,6vw,52px);font-weight:1000;letter-spacing:.18em;color:var(--accent);padding:15px 4px;text-align:center;background:#172c37;border:1px solid #60828b;margin:15px 0}
+.lobby-input{width:100%;font:1000 30px Inter,Segoe UI,Arial,sans-serif;letter-spacing:.15em;text-align:center;text-transform:uppercase;color:white;background:#142c3b;border:1px solid #6e919b;padding:17px;margin:12px 0}
+.lobby-status{min-height:42px;color:#d3e7eb;font-size:13px;line-height:1.5;margin:14px 0}
+#pvpHud{display:none;position:absolute;top:75px;left:50%;transform:translateX(-50%);background:#071a28d9;color:white;font-weight:900;letter-spacing:.08em;padding:12px 19px;border:1px solid #6ca5a9;white-space:nowrap;font-size:13px;max-width:95vw;text-align:center}
+#pvpResultPanel .pvp-outcome{font-size:18px;color:#e6ad5e;font-weight:900;margin-top:22px}
+#pvpReturnTimer{font-size:14px;font-weight:800;color:#bce1e5;margin-top:22px}
 #loader{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:white;z-index:13;font-size:11px;text-shadow:0 1px 6px #000;font-weight:700}
 @media(max-width:670px){.panel{padding:18px}#topbar{left:12px;right:12px}#bottom{left:12px;bottom:8px;gap:5px}.metric{padding:9px;min-width:85px}.metric .n{font-size:24px}.brand{font-size:14px}#tips{display:none}#weaponView{width:75vw;height:45vw}.stat{margin-left:5px}.stat b{font-size:16px}}
 </style>
@@ -44,8 +50,34 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div id="stage"></div><div id="vignette"></div><div id="damage"></div>
 <div id="weaponView"></div><div id="flash"></div>
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
-<div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small>BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span><span id="aiFrozenIndicator"> ❄ AI FROZEN (O TO UNFREEZE)</span>WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT · RIGHT CLICK AIM / ZOOM<br/>R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
-<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena. Enemies hold the final-frame guard pose, track you in combat, and play the real FBX firing animation. The textured 9mm pistol model appears while holding or shooting, not during the draw animation.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><button class="secondary" id="openSettingsMenu">SETTINGS ⚙</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot · Right-click to aim and zoom · Space to jump. Requires internet for Three.js. Enemy pistol model: <a href="https://sketchfab.com/3d-models/9mm-pistol-43bc09f5aace4346a8a2b6e1580fc03f" target="_blank" rel="noopener noreferrer">9mm Pistol by TORI106</a> on Sketchfab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.</div></div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="openSettingsPause">SETTINGS ⚙</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="settingsPanel" style="display:none">
+<div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>// ENEMY RIG TEST</small></div><div class="micro" id="assetBadge">LOADED: CHARACTER + WALKING FBX</div></div><div><span class="stat"><b id="kills">0 / 5</b><small id="killsLabel">BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="pvpHud">1V1 • YOU 0 – 0 OPPONENT • FIRST TO 3</div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span><span id="aiFrozenIndicator"> ❄ AI FROZEN (O TO UNFREEZE)</span>WASD MOVE · ARROWS OR MOUSE LOOK<br/>LEFT CLICK SHOOT · RIGHT CLICK AIM / ZOOM<br/>R RELOAD · SPACE JUMP · ESC PAUSE</div></div>
+<div id="overlay"><div class="panel" id="menuPanel"><div class="eyebrow">// CUSTOM MODEL INTEGRATION TEST</div><h1>DUST<span>LINE.</span></h1><p>Your uploaded <b>character.fbx</b> is the CPU enemy body. Your <b>Walking.fbx</b> drives the walking animation. Five moving enemies in a compact 3D arena. Enemies hold the final-frame guard pose, track you in combat, and play the real FBX firing animation. The textured 9mm pistol model appears while holding or shooting, not during the draw animation.</p><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="status" role="status">Loading your character and animation…</div><button class="primary" id="play" disabled>LOADING MODELS...</button><button class="secondary" id="createLobbyButton" disabled>CREATE LOBBY</button><button class="secondary" id="joinLobbyButton" disabled>JOIN LOBBY</button><button class="secondary" id="openSettingsMenu">SETTINGS ⚙</button><div class="foot">WASD to move · Mouse/trackpad or arrow keys to look · Left-click to shoot · Right-click to aim and zoom · Space to jump. Requires internet for Three.js. Enemy pistol model: <a href="https://sketchfab.com/3d-models/9mm-pistol-43bc09f5aace4346a8a2b6e1580fc03f" target="_blank" rel="noopener noreferrer">9mm Pistol by TORI106</a> on Sketchfab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.</div></div><div class="panel" id="createLobbyPanel" style="display:none">
+<div class="eyebrow">// ONLINE • HOST</div><h1>CREATE <span>LOBBY.</span></h1>
+<p>Choose 1v1, share your code, and start when your opponent joins. You're already player one.</p>
+<button class="primary" id="createOneVOne">1V1 • FIRST TO 3</button>
+<div id="hostLobbyInfo" style="display:none">
+<div class="eyebrow" style="margin-top:18px">YOUR LOBBY CODE</div>
+<div class="lobby-code" id="hostLobbyCode">------</div>
+<button class="secondary" id="copyLobbyCode">COPY CODE</button>
+<div class="lobby-status" id="hostLobbyStatus">Creating your lobby...</div>
+<button class="primary" id="hostStartMatch" disabled>START MATCH ▶</button>
+</div>
+<button class="secondary" id="createLobbyBack">BACK TO MAIN MENU</button>
+</div><div class="panel" id="joinLobbyPanel" style="display:none">
+<div class="eyebrow">// ONLINE • JOIN</div><h1>JOIN <span>LOBBY.</span></h1>
+<p>Enter the six-character code from your host to join their 1v1 match.</p>
+<label for="joinLobbyCode" class="eyebrow">LOBBY CODE</label>
+<input class="lobby-input" id="joinLobbyCode" type="text" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABC234" aria-label="Lobby code"/>
+<button class="primary" id="joinLobbySubmit">JOIN 1V1 ▶</button>
+<div class="lobby-status" id="joinLobbyStatus">Waiting for a code.</div>
+<button class="secondary" id="joinLobbyBack">BACK TO MAIN MENU</button>
+</div><div class="panel" id="pvpResultPanel" style="display:none">
+<div class="eyebrow" id="pvpResultTag">// MATCH COMPLETE</div>
+<h1 id="pvpResultTitle">YOU WON.</h1>
+<p>First to three eliminations.</p>
+<div class="pvp-outcome" id="pvpResultScore">FINAL SCORE 3 – 0</div>
+<div id="pvpReturnTimer">Returning to main menu in 5 seconds...</div>
+</div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">// TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="openSettingsPause">SETTINGS ⚙</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="settingsPanel" style="display:none">
 <div class="eyebrow">// CONTROL & GAMEPLAY OPTIONS</div><h1>SETTINGS<span>.</span></h1>
 <div class="settings-row"><label class="settings-title" for="sensitivitySlider">MOUSE SENSITIVITY <output id="sensitivityValue">1.0×</output></label><input class="settings-range" type="range" id="sensitivitySlider" min="0.2" max="3" step="0.1" value="1"><div class="settings-note">How fast your view turns with the mouse.</div></div>
 <div class="settings-row"><label class="settings-title" for="fovSlider">FIELD OF VIEW <output id="fovValue">78°</output></label><input class="settings-range" type="range" id="fovSlider" min="60" max="110" step="1" value="78"><div class="settings-note">Higher FOV shows more of the arena. Right-click zoom still works.</div></div>
@@ -94,7 +126,7 @@ function makePlaceholderEnemy(){
 }
 const ray=new THREE.Raycaster();ray.far=95;const UP=new THREE.Vector3(0,1,0);const rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),v3=new THREE.Vector3();
 function say(str,secs=2){$('message').textContent=str;$('message').style.opacity=1;toastTimer=secs}
-function setPanel(which){document.body.classList.toggle('in-game',!which);$('settingsPanel').style.display=which==='settings'?'block':'none';$('thankYouPanel').style.display=which==='thankyou'?'block':'none';$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which?'none':'block'}
+function setPanel(which){document.body.classList.toggle('in-game',!which);$('settingsPanel').style.display=which==='settings'?'block':'none';$('thankYouPanel').style.display=which==='thankyou'?'block':'none';$('createLobbyPanel').style.display=which==='createLobby'?'block':'none';$('joinLobbyPanel').style.display=which==='joinLobby'?'block':'none';$('pvpResultPanel').style.display=which==='pvpResult'?'block':'none';$('menuPanel').style.display=which==='menu'?'block':'none';$('pausePanel').style.display=which==='pause'?'block':'none';$('endPanel').style.display=which==='end'?'block':'none';$('overlay').style.display=which?'flex':'none';$('hud').style.display=which?'none':'block';$('reticle').style.display=which?'none':'block';$('weaponView').style.display=which?'none':'block'}
 function updateSettingsUI(){
  $('sensitivitySlider').value=mouseSensitivity;$('sensitivityValue').textContent=mouseSensitivity.toFixed(1)+'×';
  $('fovSlider').value=baseFov;$('fovValue').textContent=baseFov+'°';
@@ -615,14 +647,14 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  const pistolLoaded=await loadPistolModel();
  if(!pistolLoaded)console.warn('Upload pistol.glb to the GitHub repository root to enable enemy handguns.');
  log('Ready: character, walking, '+(shootClip?'shooting':'')+' and '+(pistolLoaded?'textured pistol.':'pistol asset not yet uploaded.'));
-$('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
+$('play').disabled=false;$('play').textContent='SINGLE PLAYER ▶';$('createLobbyButton').disabled=false;$('joinLobbyButton').disabled=false;$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
  }catch(e){
  console.warn('DUSTLINE custom assets unavailable; using temporary enemies:',e);
  if(!renderer){$('status').textContent='3D engine could not initialize: '+(e?.message||e);$('play').disabled=true;$('play').textContent='3D ENGINE FAILED';$('loader').style.display='none';return}
  if(!template)template=makePlaceholderEnemy();
  walkingClip=null;
  $('status').textContent='Temporary enemies ready. Your FBX files are missing or invalid. Upload assets/character.fbx and assets/walking.fbx to GitHub to show your real models. ('+(e?.message||e)+')';
- $('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';
+ $('play').disabled=false;$('play').textContent='SINGLE PLAYER ▶';$('createLobbyButton').disabled=false;$('joinLobbyButton').disabled=false;$('loader').style.display='none';
  $('assetBadge').textContent='TEMPORARY ENEMY MODELS · FBX NOT LOADED';
 }}
 init();
