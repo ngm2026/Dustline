@@ -35,3 +35,17 @@ This is a lightweight **WebRTC peer-to-peer 1v1 prototype** powered by PeerJS 1.
 The lobby handshake, code validation, host-start gating, round resets, first-to-three score logic, winner/loser messages, and five-second return were checked with mocked two-browser connections and simulated gameplay in the code authoring environment.
 
 A live end-to-end test on two devices, including network traversal and rendering/animation, **has not been performed** here and is still recommended before calling this production ready.
+
+## Three-stage jump animations (Nov 2026)
+
+The original uploaded **W1_Stand_Aim_Jump_Start_IPC.fbx**, **W1_Stand_Aim_Jump_Air_IPC.fbx**, and **W1_Stand_Aim_Jump_End_IPC.fbx** have been sampled and **retargeted from their MotusMan skeleton** to DUSTLINE's existing Mixamo character. The game downloads compact source-derived poses from `assets/animations/jump_poses.js`, so no extra manual upload of the large FBX files is needed.
+
+- **Start**: first ~0.16 seconds of take-off, based on eight pose samples from the 0.5-second source clip
+- **Air**: ~0.61 seconds, based on 13 samples from the 2.0-second source clip
+- **End**: ~0.19 seconds after landing, based on nine samples from the 0.93-second source clip
+- The game synchronizes each player's jump height in the existing ~20 Hz WebRTC updates; the other player's model rises and lands instead of standing still on the ground
+- The 9mm pistol retains its grip position and follows the right hand's animated **rotation**, including during take-off, airborne movement, landing, and gunfire
+- The normal walking animation is paused during a jump; gunfire can still temporarily blend over the jump pose
+- The jump timings can be adjusted in `JUMP_PHASE_DURATION` in `index.html`, and the actual vertical arc follows the original 7.5 initial velocity and 19.5 gravity physics
+
+**Important:** Because the supplied jump files use a different skeleton, this is a joint-rotation retarget and resampled approximation, not full original FBX playback. The transfer and timing passed code/data checks, but the final animation and grip alignment still need a two-browser visual test.
