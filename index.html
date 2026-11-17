@@ -101,10 +101,11 @@ window.__dustlineModuleLoaded=true;
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {JUMP_BONES,decodeJumpClips} from './assets/animations/jump_poses.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 
 const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
-let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,pistolTemplate=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
+let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,pistolTemplate=null,jumpClipData=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
@@ -295,6 +296,7 @@ const pistolHandPosition=new THREE.Vector3();
 const pistolGripOffset=new THREE.Vector3();
 const pistolWorldRotation=new THREE.Quaternion();
 const pistolYAxis=new THREE.Vector3(0,1,0);
+const pistolHandQuaternion=new THREE.Quaternion();
 function makeEnemyPistol(b){
  if(!pistolTemplate)return;
  const hand=b.rightHand;
@@ -305,6 +307,7 @@ function makeEnemyPistol(b){
  b.pistol=pistolTemplate.clone(true); // Shares the imported mesh/texture data.
  b.pistol.scale.setScalar(pistolWorldScale);
  b.pistol.visible=false;
+ b.pistolHandMountQuat=null;
  scene.add(b.pistol);
 }
 function updateEnemyPistol(b){
@@ -314,9 +317,16 @@ function updateEnemyPistol(b){
  const state=b.weaponState;
  b.pistol.visible=b.alive&&(b.shootAnim>0||state==='guard'||state==='holding'||state==='armed')&&state!=='drawing';
  if(!b.pistol.visible)return;
- // The right hand is animated by the real FBX pose, including firing recoil.
+ // Calibrate the original barrel-forward orientation once, then rotate the
+ // REAL pistol with the animated wrist. The weapon keeps its grip during
+ // jump start, airborne, landing, and shooting poses.
  b.rightHand.getWorldPosition(pistolHandPosition);
- pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
+ b.rightHand.getWorldQuaternion(pistolHandQuaternion);
+ if(!b.pistolHandMountQuat){
+   pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
+   b.pistolHandMountQuat=pistolHandQuaternion.clone().invert().multiply(pistolWorldRotation);
+ }
+ pistolWorldRotation.copy(pistolHandQuaternion).multiply(b.pistolHandMountQuat);
  b.pistol.quaternion.copy(pistolWorldRotation);
  pistolGripOffset.copy(pistolGripLocal).multiplyScalar(pistolWorldScale).applyQuaternion(pistolWorldRotation);
  // Keep the grip in the hand, rather than placing the gun on the floor,
@@ -348,16 +358,51 @@ async function loadPistolModel(){
    return false; // Do not block gameplay or FBX animation.
  }
 }
+// The uploaded IPC jumps use a MotusMan skeleton, not the Mixamo rig. Their
+// sampled per-bone relative rotations are retargeted over the DUSTLINE bind
+// and held-gun pose; root motion is intentionally excluded (physics owns Y).
+const JUMP_PHASE_DURATION={start:.16,air:.61,end:.19};
+const JUMP_GRAVITY=19.5,JUMP_UP_VELOCITY=7.5;
+const JUMP_FLIGHT_SECONDS=2*JUMP_UP_VELOCITY/JUMP_GRAVITY;
+const jumpQuatA=new THREE.Quaternion(),jumpQuatB=new THREE.Quaternion();
+function buildJumpBindings(rig,guardPose){
+ const byName=new Map(),held=new Map();
+ rig.traverse(o=>{if(o.isBone)byName.set(poseBoneId(o.name),o)});
+ for(const entry of guardPose)held.set(entry.bone,entry.quat);
+ return JUMP_BONES.map(name=>{
+   const bone=byName.get(name);
+   return bone?{bone,base:(held.get(bone)||bone.quaternion).clone()}:null;
+ });
+}
+function applyJumpPose(b){
+ const clip=jumpClipData?.[b.jumpStage];
+ if(!clip||!b.jumpBones||!clip.frames)return;
+ const index=clamp(b.jumpProgress,0,1)*(clip.frames-1);
+ const first=Math.floor(index),next=Math.min(clip.frames-1,first+1);
+ const fraction=index-first,total=JUMP_BONES.length;
+ for(let i=0;i<b.jumpBones.length;i++){
+   const binding=b.jumpBones[i];if(!binding)continue;
+   let offset=(first*total+i)*4;
+   jumpQuatA.fromArray(clip.values,offset).normalize();
+   offset=(next*total+i)*4;
+   jumpQuatB.fromArray(clip.values,offset).normalize();
+   jumpQuatA.slerp(jumpQuatB,fraction);
+   // Preserve the target skeleton's baseline / held-gun finger pose.
+   binding.bone.quaternion.copy(binding.base).premultiply(jumpQuatA).normalize();
+ }
+}
 const shootingPoseQuat=new THREE.Quaternion();
 function animateEnemyWeapon(b,dt){
  // Walking owns the legs. Apply FBX weapon keyframes after the walking mixer.
- if(b.action)b.action.timeScale=b.moving?1:0;
+ if(b.action)b.action.timeScale=b.moving&&!b.jumpStage?1:0;
  if(b.mixer)b.mixer.update(dt);
 
  // EXACT FINAL FRAME: bone rotations copied after the walking mixer on every
  // frame. Every upper-body and finger joint matches the Drawing Gun FBX's
  // last keyframe; legs remain controlled by walking. Shooting blends over it.
  for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
+ // Three-stage jump is applied after the held-gun stance, but before firing.
+ if(b.jumpStage)applyJumpPose(b);
 
  if(b.shootAnim>0&&b.shootPose.length){
    // The shooting clip begins from its own aimed pose. Blend into the actual
@@ -750,11 +795,13 @@ function pvpCreateOpponent(){
    depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));
  hit.position.y=1.04;holder.add(hit);
  const pos=pvpSpawn(pvp.role==='host'?'guest':'host');
- const bot={alive:true,x:pos.x,z:pos.z,holder,body,rig,hit,mixer:null,action:null,
+ const bot={alive:true,x:pos.x,z:pos.z,y:0,holder,body,rig,hit,mixer:null,action:null,
    guardPose:buildGuardPose(rig),shootPose:buildFBXPoseSampler(shootClip,rig),
    shootAnim:0,moving:false,weaponState:'guard',pistol:null,rightHand:null,
-   targetX:pos.x,targetZ:pos.z,targetYaw:pos.yaw,animationFailed:false};
+   targetX:pos.x,targetZ:pos.z,targetY:0,targetYaw:pos.yaw,animationFailed:false,
+   jumpStage:null,jumpProgress:0,jumpBones:null};
  rig.traverse(obj=>{if(obj.isBone&&poseBoneId(obj.name)==='righthand')bot.rightHand=obj});
+ bot.jumpBones=buildJumpBindings(rig,bot.guardPose);
  if(walkingClip){
    bot.mixer=new THREE.AnimationMixer(rig);
    bot.action=bot.mixer.clipAction(walkingClip);
@@ -1008,6 +1055,9 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
    $('status').textContent='One or both weapon animation FBXs are missing. Upload the small FBXs into assets/animations/ to enable draw and shoot animations.';
  }
  // Load the real GLB once; enemies reuse its original textured geometry.
+ // Retarget the three user-provided jumping FBXs, baked into a compact module.
+ try{jumpClipData=await decodeJumpClips();console.info('DUSTLINE: jump start, air and landing poses ready')}
+ catch(error){jumpClipData=null;console.warn('DUSTLINE: jump poses unavailable; jumping height still works',error)}
  log('Loading textured enemy pistol…');
  const pistolLoaded=await loadPistolModel();
  if(!pistolLoaded)console.warn('Upload pistol.glb to the GitHub repository root to enable enemy handguns.');
