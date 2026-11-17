@@ -57,10 +57,11 @@ window.addEventListener("load",()=>setTimeout(()=>{if(!window.__dustlineModuleLo
 window.__dustlineModuleLoaded=true;
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 
 const $=id=>document.getElementById(id), TAU=Math.PI*2, clamp=(a,min,max)=>Math.max(min,Math.min(max,a)), rnd=(a,b)=>a+Math.random()*(b-a);
-let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
+let scene,camera,renderer,template,walkingClip=null,drawClip=null,shootClip=null,pistolTemplate=null,enemies=[],solid=[],casts=[],mood='loading',difficulty='normal',hitTimer=0,toastTimer=0,recoil=0,flash=0,shootHeld=false,rightHeld=false,triggerReady=true,aimAmount=0,mousePrev=null,ammo,elapsed=0,kills=0,health=100,lastFrame=performance.now(),nextShot=0,reloadEnd=0,damageAlpha=0,vY=0,eyeY=1.65,yaw=0,pitch=0;
 const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
@@ -239,6 +240,69 @@ function buildFBXPoseSampler(clip,rig){
  }
  return channels;
 }
+// User-supplied Sketchfab "9mm Pistol" glb. Reuse its actual meshes and PBR
+// textures for all enemies. Its native long axis is -X (muzzle direction),
+// so rotate +90 degrees around Y to point toward the AI's local +Z facing.
+const PISTOL_LENGTH_METERS=.235;
+const pistolGripLocal=new THREE.Vector3();
+let pistolWorldScale=.1;
+const pistolHandPosition=new THREE.Vector3();
+const pistolGripOffset=new THREE.Vector3();
+const pistolWorldRotation=new THREE.Quaternion();
+const pistolYAxis=new THREE.Vector3(0,1,0);
+function makeEnemyPistol(b){
+ if(!pistolTemplate)return;
+ const hand=b.rightHand;
+ if(!hand){
+   console.warn('DUSTLINE: cannot attach GLB pistol; no right-hand bone');
+   return;
+ }
+ b.pistol=pistolTemplate.clone(true); // Shares the imported mesh/texture data.
+ b.pistol.scale.setScalar(pistolWorldScale);
+ b.pistol.visible=false;
+ scene.add(b.pistol);
+}
+function updateEnemyPistol(b){
+ if(!b.pistol)return;
+ // Hide the pistol DURING drawing. Show it when held/ready and during shots.
+ // The current AI keeps the final draw-pose as its normal holding stance.
+ const state=b.weaponState;
+ b.pistol.visible=b.alive&&(b.shootAnim>0||state==='guard'||state==='holding'||state==='armed')&&state!=='drawing';
+ if(!b.pistol.visible)return;
+ // The right hand is animated by the real FBX pose, including firing recoil.
+ b.rightHand.getWorldPosition(pistolHandPosition);
+ pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
+ b.pistol.quaternion.copy(pistolWorldRotation);
+ pistolGripOffset.copy(pistolGripLocal).multiplyScalar(pistolWorldScale).applyQuaternion(pistolWorldRotation);
+ // Keep the grip in the hand, rather than placing the gun on the floor,
+ // behind the character, or at a fixed world-space offset.
+ b.pistol.position.copy(pistolHandPosition).sub(pistolGripOffset);
+}
+async function loadPistolModel(){
+ try{
+   const gltf=await new GLTFLoader().loadAsync('assets/pistol.glb');
+   const root=gltf.scene;
+   const box=new THREE.Box3().setFromObject(root);
+   if(box.isEmpty())throw Error('pistol.glb contains no usable mesh');
+   const dimensions=box.getSize(new THREE.Vector3());
+   if(dimensions.x<.0001)throw Error('pistol.glb has invalid dimensions');
+   pistolWorldScale=PISTOL_LENGTH_METERS/dimensions.x;
+   // Geometry inspection: barrel extends toward -X, grip near the rear
+   // (+X) and below the slide (-Y). Correct for the baked Sketchfab transforms.
+   pistolGripLocal.set(
+     box.min.x+dimensions.x*.86,
+     box.min.y+dimensions.y*.38,
+     (box.min.z+box.max.z)*.5
+   );
+   root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false;}});
+   pistolTemplate=root;
+   console.info('DUSTLINE: textured 9mm Pistol GLB ready; scale',pistolWorldScale);
+   return true;
+ }catch(error){
+   console.warn('DUSTLINE: enemy pistol GLB missing or invalid at assets/pistol.glb',error);
+   return false; // Do not block gameplay or FBX animation.
+ }
+}
 const shootingPoseQuat=new THREE.Quaternion();
 function animateEnemyWeapon(b,dt){
  // Walking owns the legs. Apply FBX weapon keyframes after the walking mixer.
@@ -261,6 +325,7 @@ function animateEnemyWeapon(b,dt){
      channel.bone.quaternion.slerp(shootingPoseQuat,weight).normalize();
    }
  }
+ updateEnemyPistol(b);
 }
 function actionOnlyUpperBody(clip){
  if(!clip)return null;
@@ -296,7 +361,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,
-  mixer:null,guardPose:[],shootPose:[],
+  mixer:null,guardPose:[],shootPose:[],pistol:null,rightHand:null,
   shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
   moving:true,readyProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
   weaponState:'guard',shootAnim:0,
@@ -310,10 +375,12 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  }
  bot.guardPose=buildGuardPose(rig);
  bot.shootPose=buildFBXPoseSampler(shootClip,rig);
+ rig.traverse(o=>{if(o.isBone&&poseBoneId(o.name)==='righthand')bot.rightHand=o});
+ makeEnemyPistol(bot);
  if(shootClip&&bot.shootPose.length===0)console.warn('DUSTLINE: shooting FBX tracks did not match character bones');
  enemies.push(bot);
 }
-function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
+function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.pistol)scene.remove(b.pistol);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
@@ -443,7 +510,7 @@ function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(e
  const targets=[...casts,...enemies.filter(b=>b.alive).map(b=>b.hit)];const intersects=ray.intersectObjects(targets,false);
  if(intersects.length){const object=intersects[0].object;const bot=object.userData.bot;
  if(bot&&bot.alive){bot.hp-=w.damage;$('hitmark').style.opacity=1;hitTimer=.14;
- if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
+ if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);if(bot.pistol)scene.remove(bot.pistol);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
 }
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
@@ -522,7 +589,11 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  if(!drawClip||!shootClip){
    $('status').textContent='One or both weapon animation FBXs are missing. Upload the small FBXs into assets/animations/ to enable draw and shoot animations.';
  }
- log('Ready: character, walking, and '+(drawClip?'drawing ':'')+(shootClip?'shooting':'')+' animations.');
+ // Load the real GLB once; enemies reuse its original textured geometry.
+ log('Loading textured enemy pistol…');
+ const pistolLoaded=await loadPistolModel();
+ if(!pistolLoaded)console.warn('Upload the provided pistol.glb to GitHub assets/pistol.glb to enable enemy handguns.');
+ log('Ready: character, walking, '+(shootClip?'shooting':'')+' and '+(pistolLoaded?'textured pistol.':'pistol asset not yet uploaded.'));
 $('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
  }catch(e){
  console.warn('DUSTLINE custom assets unavailable; using temporary enemies:',e);
