@@ -293,7 +293,7 @@ function updateEnemyPistol(b){
 }
 async function loadPistolModel(){
  try{
-   const gltf=await new GLTFLoader().loadAsync('assets/pistol.glb');
+   const gltf=await new GLTFLoader().loadAsync('pistol.glb');
    const root=gltf.scene;
    const box=new THREE.Box3().setFromObject(root);
    if(box.isEmpty())throw Error('pistol.glb contains no usable mesh');
@@ -312,7 +312,7 @@ async function loadPistolModel(){
    console.info('DUSTLINE: textured 9mm Pistol GLB ready; scale',pistolWorldScale);
    return true;
  }catch(error){
-   console.warn('DUSTLINE: enemy pistol GLB missing or invalid at assets/pistol.glb',error);
+   console.warn('DUSTLINE: enemy pistol GLB missing or invalid at pistol.glb',error);
    return false; // Do not block gameplay or FBX animation.
  }
 }
@@ -606,7 +606,7 @@ async function init(){try{buildWorld();setPanel('menu');requestAnimationFrame(fr
  // Load the real GLB once; enemies reuse its original textured geometry.
  log('Loading textured enemy pistol…');
  const pistolLoaded=await loadPistolModel();
- if(!pistolLoaded)console.warn('Upload the provided pistol.glb to GitHub assets/pistol.glb to enable enemy handguns.');
+ if(!pistolLoaded)console.warn('Upload pistol.glb to the GitHub repository root to enable enemy handguns.');
  log('Ready: character, walking, '+(shootClip?'shooting':'')+' and '+(pistolLoaded?'textured pistol.':'pistol asset not yet uploaded.'));
 $('play').disabled=false;$('play').textContent='DEPLOY INTO ARENA ▶';$('loader').style.display='none';$('assetBadge').textContent='FBX CHARACTER + WALKING · '+walkingClip.tracks.length+' TRACKS';
  }catch(e){
