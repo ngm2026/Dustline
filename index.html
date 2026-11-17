@@ -109,7 +109,7 @@ const SETTINGS_STORE='dustline-controls-v1';
 let savedSettings={};try{savedSettings=JSON.parse(localStorage.getItem(SETTINGS_STORE)||'{}')||{}}catch(e){}
 let mouseSensitivity=clamp(Number(savedSettings.mouseSensitivity)||1,.2,3);
 let baseFov=clamp(Number(savedSettings.baseFov)||78,60,110);
-let cheatsEnabled=savedSettings.cheatsEnabled===true,infiniteHealth=false,aiFrozen=false,settingsReturn='menu';
+let cheatsEnabled=savedSettings.cheatsEnabled===true,infiniteHealth=false,aiFrozen=false,settingsReturn='menu',matchMode='solo';
 function saveSettings(){try{localStorage.setItem(SETTINGS_STORE,JSON.stringify({mouseSensitivity,baseFov,cheatsEnabled}))}catch(e){}}
 const PLAYER={x:0,z:15,r:0.52};const keys={};const stats={easy:{speed:1.35,damage:4,fireRate:2.4,accuracy:.4},normal:{speed:2.05,damage:7,fireRate:1.6,accuracy:.66},hard:{speed:2.8,damage:11,fireRate:1.05,accuracy:.9}};
 const weapon={name:'HANDGUN',max:15,mag:15,stock:75,rate:.25,damage:43,spread:.010};
@@ -428,7 +428,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
 function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.pistol)scene.remove(b.pistol);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
-function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('aiFrozenIndicator').style.display=aiFrozen?'block':'none';$('kills').textContent=`${kills} / 5`;$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
+function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('aiFrozenIndicator').style.display=aiFrozen?'block':'none';$('kills').textContent=matchMode==='pvp'?(pvp.score.host+' – '+pvp.score.guest):(`${kills} / 5`);$('killsLabel').textContent=matchMode==='pvp'?'HOST – GUEST':'BOTS ELIMINATED';$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
 function requestGameMouse(){
  if(!renderer?.domElement||document.pointerLockElement===renderer.domElement)return;
  try{
@@ -457,11 +457,11 @@ document.addEventListener('pointerlockchange',()=>{
  hadMouseLock=locked;
 });
 let hadMouseLock=false;
-function start(){if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
+function start(){if(pvp.peer||pvp.remote)pvpShutdown();matchMode='solo';if(!template){$('status').textContent='Models are not ready yet. Check loading status.';return}
  mood='playing';elapsed=0;kills=0;health=100;infiniteHealth=false;aiFrozen=false;PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;weapon.mag=weapon.max;weapon.stock=75;spawn();setPanel(null);updateHUD();requestGameMouse();say('5 ENEMIES // CUSTOM WALK CYCLE',2.6)}
 function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'// OBJECTIVES COMPLETE':'// OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
 function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;setPanel('pause');releaseGameMouse()}
-function menu(){mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
+function menu(){if(pvp.peer||pvp.remote)pvpShutdown();mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
 function reload(){const w=weapon;if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+1.25;say('RELOADING',.7)}
 function updateReload(){if(reloadEnd!==0&&elapsed>=reloadEnd){const w=weapon,n=Math.min(w.max-w.mag,w.stock);w.mag+=n;w.stock-=n;reloadEnd=0;updateHUD()}}
 function lineOfSight(b){v3.set(PLAYER.x,1.65,PLAYER.z);rayOrigin.set(b.x,1.55,b.z);rayDir.copy(v3).sub(rayOrigin);const max=rayDir.length();rayDir.normalize();ray.set(rayOrigin,rayDir);ray.far=max;return ray.intersectObjects(casts,false).length===0}
@@ -552,11 +552,371 @@ function botUpdate(b,dt){
 function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(elapsed<nextShot)return;if(w.mag<=0){reload();return}
  nextShot=elapsed+w.rate;w.mag--;recoil=1;flash=1;updateHUD();if(w.mag===0)say('PRESS R TO RELOAD',1.1);
  camera.updateMatrixWorld();const forward=new THREE.Vector3();camera.getWorldDirection(forward);const spread=w.spread*(1-.75*aimAmount);forward.add(new THREE.Vector3(rnd(-spread,spread),rnd(-spread,spread),rnd(-spread,spread))).normalize();ray.set(camera.position,forward);ray.far=85;
+ if(matchMode==='pvp'){
+ const target=pvp.remote;
+ const hits=ray.intersectObjects(target?[...casts,target.hit]:casts,false);
+ const hitOpponent=!!(target&&hits.length&&hits[0].object===target.hit);
+ pvpSend({type:'shot',round:pvp.round,hit:hitOpponent});
+ if(hitOpponent){$('hitmark').style.opacity=1;hitTimer=.14;if(pvp.role==='host')pvpHostDamage('guest')}
+ return;
+ }
  const targets=[...casts,...enemies.filter(b=>b.alive).map(b=>b.hit)];const intersects=ray.intersectObjects(targets,false);
  if(intersects.length){const object=intersects[0].object;const bot=object.userData.bot;
  if(bot&&bot.alive){bot.hp-=w.damage;$('hitmark').style.opacity=1;hitTimer=.14;
  if(bot.hp<=0){bot.alive=false;scene.remove(bot.holder);if(bot.pistol)scene.remove(bot.pistol);kills++;updateHUD();say('ENEMY '+(bot.id+1)+' ELIMINATED',1.4);if(kills>=5)endGame(true)}}}
 }
+
+// DUSTLINE 1v1: the free PeerJS Cloud service exchanges connection details,
+// and WebRTC sends position/shots directly between two browsers. The lobby
+// creator is responsible for scoring and round resets.
+const PVP_PEERJS_URL='https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';
+let pvpScriptPromise=null;
+const pvp={peer:null,conn:null,role:null,code:'',generation:0,connected:false,
+ active:false,finished:false,returnAt:0,remote:null,round:1,score:{host:0,guest:0},
+ health:{host:100,guest:100},nextStateAt:0,invulnerableUntil:0,lastGuestHit:-100};
+function pvpSend(obj){
+ if(!pvp.conn?.open)return false;
+ try{pvp.conn.send(obj);return true}catch(e){console.warn('DUSTLINE network send:',e);return false}
+}
+function pvpNewCode(){
+ const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',bytes=new Uint8Array(6);
+ crypto.getRandomValues(bytes);
+ return Array.from(bytes,c=>chars[c%chars.length]).join('');
+}
+function pvpLoadPeerJS(){
+ if(window.Peer)return Promise.resolve(window.Peer);
+ if(!pvpScriptPromise){
+   pvpScriptPromise=new Promise((resolve,reject)=>{
+     const el=document.createElement('script');
+     el.src=PVP_PEERJS_URL;
+     el.onload=()=>window.Peer?resolve(window.Peer):reject(Error('PeerJS library missing'));
+     el.onerror=()=>reject(Error('Could not load the multiplayer library'));
+     document.head.appendChild(el);
+   }).catch(e=>{pvpScriptPromise=null;throw e});
+ }
+ return pvpScriptPromise;
+}
+function pvpStatus(message){
+ $(pvp.role==='host'?'hostLobbyStatus':'joinLobbyStatus').textContent=message;
+}
+function pvpRemoveRemote(){
+ if(!pvp.remote)return;
+ scene.remove(pvp.remote.holder);
+ if(pvp.remote.pistol)scene.remove(pvp.remote.pistol);
+ if(pvp.remote.mixer)pvp.remote.mixer.stopAllAction();
+ pvp.remote=null;
+}
+function pvpShutdown(){
+ pvp.generation++;
+ const conn=pvp.conn,peer=pvp.peer;
+ pvp.conn=null;pvp.peer=null;pvp.connected=false;pvp.active=false;pvp.finished=false;
+ pvp.role=null;pvp.code='';
+ if(conn)try{conn.close()}catch(e){}
+ if(peer)try{peer.destroy()}catch(e){}
+ if(scene)pvpRemoveRemote();
+ $('pvpHud').style.display='none';
+ matchMode='solo';
+}
+function pvpLeave(){
+ if(pvp.connected)pvpSend({type:'leave'});
+ pvpShutdown();menu();
+}
+function pvpOpenCreate(){
+ pvpShutdown();mood='menu';setPanel('createLobby');
+ $('hostLobbyInfo').style.display='none';
+ $('createOneVOne').disabled=!template;
+}
+function pvpOpenJoin(){
+ pvpShutdown();mood='menu';setPanel('joinLobby');
+ $('joinLobbySubmit').disabled=!template;
+ $('joinLobbyStatus').textContent='Enter the host code to connect.';
+ $('joinLobbyCode').focus();
+}
+function pvpAttach(conn,generation){
+ if(generation!==pvp.generation||(pvp.conn&&pvp.conn!==conn)){conn.close();return}
+ pvp.conn=conn;
+ conn.on('open',()=>{
+   if(generation!==pvp.generation)return;
+   pvp.connected=true;
+   if(pvp.role==='host'){
+     pvpStatus('YOU (HOST) — JOINED • OPPONENT CONNECTED • READY TO START');
+     $('hostStartMatch').disabled=false;
+     pvpSend({type:'welcome',code:pvp.code});
+   }else{
+     pvpStatus('CONNECTED! Waiting for the host to press START.');
+     $('joinLobbySubmit').disabled=true;
+   }
+ });
+ conn.on('data',data=>{if(generation===pvp.generation)pvpReceive(data)});
+ conn.on('close',()=>{
+   if(generation!==pvp.generation)return;
+   if(pvp.conn===conn)pvp.conn=null;
+   pvp.connected=false;
+   if(pvp.active&&!pvp.finished)pvpFinish(null,'OPPONENT DISCONNECTED');
+   else if(!pvp.finished&&pvp.role==='host'){
+     $('hostStartMatch').disabled=true;
+     pvpStatus('Opponent left. Share the code to invite another player.');
+   }else if(!pvp.finished){
+     pvpStatus('Connection closed. Enter the code to retry.');
+     $('joinLobbySubmit').disabled=false;
+   }
+ });
+ conn.on('error',error=>{if(generation===pvp.generation)console.warn('DUSTLINE WebRTC:',error)});
+}
+async function pvpCreateRoom(){
+ if(!template)return;
+ pvpShutdown();pvp.role='host';pvp.code=pvpNewCode();
+ const generation=pvp.generation;
+ $('hostLobbyInfo').style.display='block';
+ $('hostLobbyCode').textContent=pvp.code;
+ $('createOneVOne').disabled=true;$('hostStartMatch').disabled=true;
+ pvpStatus('Creating room... You are already player one.');
+ try{
+   const Peer=await pvpLoadPeerJS();
+   if(generation!==pvp.generation)return;
+   const peer=new Peer('dustline-1v1-'+pvp.code);pvp.peer=peer;
+   peer.on('open',()=>{if(generation===pvp.generation)pvpStatus('YOU (HOST) — JOINED • WAITING FOR OPPONENT')});
+   peer.on('connection',conn=>{
+     if(generation!==pvp.generation||pvp.active||pvp.conn){conn.close();return}
+     pvpAttach(conn,generation);
+   });
+   peer.on('error',error=>{
+     if(generation!==pvp.generation)return;
+     pvpStatus('Could not create room ('+(error.type||error.message)+'). Try again.');
+     $('createOneVOne').disabled=false;
+   });
+ }catch(error){
+   if(generation!==pvp.generation)return;
+   pvpStatus('Connection unavailable: '+error.message);
+   $('createOneVOne').disabled=false;
+ }
+}
+async function pvpJoinRoom(){
+ if(!template)return;
+ const code=$('joinLobbyCode').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+ if(!/^[A-HJ-NP-Z2-9]{6}$/.test(code)){
+   $('joinLobbyStatus').textContent='Enter the six-character code from the host.';
+   return;
+ }
+ pvpShutdown();pvp.role='guest';pvp.code=code;
+ const generation=pvp.generation;
+ $('joinLobbySubmit').disabled=true;pvpStatus('Connecting to '+code+'...');
+ try{
+   const Peer=await pvpLoadPeerJS();
+   if(generation!==pvp.generation)return;
+   const peer=new Peer();pvp.peer=peer;
+   peer.on('open',()=>{
+     if(generation!==pvp.generation)return;
+     const conn=peer.connect('dustline-1v1-'+code,{reliable:true,serialization:'json'});
+     pvpAttach(conn,generation);
+   });
+   peer.on('error',error=>{
+     if(generation!==pvp.generation)return;
+     pvpStatus(error.type==='peer-unavailable'?'Lobby not found. Ask the host to keep it open.':'Connection failed: '+(error.type||error.message));
+     $('joinLobbySubmit').disabled=false;
+   });
+ }catch(error){
+   if(generation!==pvp.generation)return;
+   pvpStatus('Unable to join: '+error.message);
+   $('joinLobbySubmit').disabled=false;
+ }
+}
+function pvpSpawn(role){
+ return role==='host'?{x:0,z:16,yaw:0}:{x:0,z:-16,yaw:Math.PI};
+}
+function pvpRemoveBots(){
+ for(const bot of enemies){
+   scene.remove(bot.holder);
+   if(bot.pistol)scene.remove(bot.pistol);
+   if(bot.mixer)bot.mixer.stopAllAction();
+ }
+ enemies=[];
+}
+function pvpCreateOpponent(){
+ const rig=cloneSkinned(template),holder=new THREE.Group(),body=new THREE.Group();
+ holder.add(body);body.add(rig);scene.add(holder);
+ rig.updateMatrixWorld(true);
+ let box=new THREE.Box3().setFromObject(rig);
+ let h=box.max.y-box.min.y;
+ if(!Number.isFinite(h)||h<.00001)h=170;
+ rig.scale.multiplyScalar(1.92/h);rig.updateMatrixWorld(true);
+ box=new THREE.Box3().setFromObject(rig);
+ rig.position.y-=box.min.y;
+ rig.position.x-=(box.min.x+box.max.x)*.5;
+ rig.position.z-=(box.min.z+box.max.z)*.5;
+ rig.traverse(obj=>{if(obj.isMesh){obj.castShadow=true;obj.receiveShadow=true;obj.frustumCulled=false}});
+ const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),
+   new THREE.MeshBasicMaterial({color:0xffffff,opacity:0,transparent:true,
+   depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));
+ hit.position.y=1.04;holder.add(hit);
+ const pos=pvpSpawn(pvp.role==='host'?'guest':'host');
+ const bot={alive:true,x:pos.x,z:pos.z,holder,body,rig,hit,mixer:null,action:null,
+   guardPose:buildGuardPose(rig),shootPose:buildFBXPoseSampler(shootClip,rig),
+   shootAnim:0,moving:false,weaponState:'guard',pistol:null,rightHand:null,
+   targetX:pos.x,targetZ:pos.z,targetYaw:pos.yaw,animationFailed:false};
+ rig.traverse(obj=>{if(obj.isBone&&poseBoneId(obj.name)==='righthand')bot.rightHand=obj});
+ if(walkingClip){
+   bot.mixer=new THREE.AnimationMixer(rig);
+   bot.action=bot.mixer.clipAction(walkingClip);
+   bot.action.setLoop(THREE.LoopRepeat);bot.action.play();
+ }
+ makeEnemyPistol(bot);
+ holder.position.set(pos.x,0,pos.z);body.rotation.y=pos.yaw+Math.PI;
+ return bot;
+}
+function pvpResetPositions(){
+ const me=pvpSpawn(pvp.role);
+ PLAYER.x=me.x;PLAYER.z=me.z;eyeY=1.65;vY=0;
+ yaw=me.yaw;pitch=0;health=pvp.health[pvp.role];
+ weapon.mag=weapon.max;weapon.stock=75;nextShot=elapsed;reloadEnd=0;
+ if(pvp.remote){
+   const other=pvpSpawn(pvp.role==='host'?'guest':'host');
+   Object.assign(pvp.remote,{x:other.x,z:other.z,targetX:other.x,targetZ:other.z,
+     targetYaw:other.yaw,shootAnim:0,moving:false});
+   pvp.remote.holder.position.set(other.x,0,other.z);
+   pvp.remote.body.rotation.y=other.yaw+Math.PI;
+ }
+ updateHUD();
+}
+function pvpStart(){
+ if(!template||!pvp.conn?.open||pvp.active)return;
+ pvpRemoveBots();pvpRemoveRemote();
+ matchMode='pvp';pvp.active=true;pvp.finished=false;
+ pvp.score={host:0,guest:0};pvp.health={host:100,guest:100};
+ pvp.round=1;pvp.invulnerableUntil=1.3;pvp.lastGuestHit=-100;pvp.nextStateAt=0;
+ mood='playing';elapsed=0;kills=0;infiniteHealth=false;aiFrozen=false;
+ rightHeld=false;shootHeld=false;recoil=0;aimAmount=0;
+ pvp.remote=pvpCreateOpponent();pvpResetPositions();
+ $('pvpHud').style.display='block';pvpUpdateScore();
+ setPanel(null);updateHUD();requestGameMouse();
+ say('1V1 LIVE • FIRST TO 3 ELIMINATIONS',2.4);
+}
+function pvpUpdateScore(){
+ const me=pvp.role||'host',them=me==='host'?'guest':'host';
+ $('pvpHud').textContent='1V1 • YOU '+pvp.score[me]+' – '+pvp.score[them]+' OPPONENT • FIRST TO 3';
+}
+function pvpBroadcast(reset){
+ pvpSend({type:'sync',round:pvp.round,score:pvp.score,health:pvp.health,reset:!!reset});
+}
+function pvpFinish(winner,reason){
+ if(!pvp.active||pvp.finished)return;
+ pvp.finished=true;pvp.active=false;pvp.returnAt=performance.now()+5000;
+ mood='pvpFinished';rightHeld=false;shootHeld=false;
+ const me=pvp.role||'host',them=me==='host'?'guest':'host';
+ $('pvpResultTag').textContent=winner?'// 1V1 MATCH COMPLETE':'// CONNECTION ENDED';
+ $('pvpResultTitle').textContent=winner?(winner===me?'YOU WON.':'YOU LOST.'):(reason||'MATCH ENDED');
+ $('pvpResultScore').textContent='FINAL SCORE '+pvp.score[me]+' – '+pvp.score[them];
+ setPanel('pvpResult');releaseGameMouse();
+ $('pvpReturnTimer').textContent='Returning to main menu in 5 seconds...';
+}
+function pvpHostDamage(victim){
+ if(pvp.role!=='host'||!pvp.active||pvp.finished||elapsed<pvp.invulnerableUntil)return;
+ if(victim==='host'){
+   if(elapsed-pvp.lastGuestHit<weapon.rate*.85)return;
+   pvp.lastGuestHit=elapsed;
+ }
+ pvp.health[victim]=Math.max(0,pvp.health[victim]-weapon.damage);
+ if(victim==='host'){health=pvp.health.host;damageAlpha=1;}
+ if(pvp.health[victim]===0){
+   const attacker=victim==='host'?'guest':'host';
+   pvp.score[attacker]++;
+   if(pvp.score[attacker]>=3){
+     pvpBroadcast(false);
+     pvpSend({type:'finish',winner:attacker,score:pvp.score});
+     pvpFinish(attacker);return;
+   }
+   pvp.round++;pvp.health={host:100,guest:100};
+   pvp.invulnerableUntil=elapsed+1.3;
+   pvpResetPositions();pvpBroadcast(true);
+   say('ROUND '+pvp.round+' • FIRST TO THREE',1.9);
+ }else{pvpBroadcast(false);updateHUD()}
+ pvpUpdateScore();
+}
+function pvpReceive(msg){
+ if(!msg||typeof msg!=='object'||typeof msg.type!=='string')return;
+ if(msg.type==='leave'){
+   if(pvp.active&&!pvp.finished)pvpFinish(null,'OPPONENT LEFT');
+   else if(!pvp.finished){
+     pvp.connected=false;pvpStatus('The other player left.');
+     if(pvp.role==='host')$('hostStartMatch').disabled=true;
+   }
+   return;
+ }
+ if(msg.type==='start'){
+   if(pvp.role==='guest'&&pvp.connected&&!pvp.active)pvpStart();
+   return;
+ }
+ if(msg.type==='state'&&pvp.active&&msg.round===pvp.round&&pvp.remote){
+   if(!Number.isFinite(msg.x)||!Number.isFinite(msg.z)||!Number.isFinite(msg.yaw))return;
+   pvp.remote.targetX=clamp(msg.x,-25,25);
+   pvp.remote.targetZ=clamp(msg.z,-25,25);
+   pvp.remote.targetYaw=msg.yaw;
+   pvp.remote.moving=!!msg.moving;
+   return;
+ }
+ if(msg.type==='shot'&&pvp.active&&msg.round===pvp.round){
+   if(pvp.remote)pvp.remote.shootAnim=SHOOT_SECONDS;
+   if(pvp.role==='host'&&msg.hit){
+     const d=pvp.remote?Math.hypot(pvp.remote.x-PLAYER.x,pvp.remote.z-PLAYER.z):999;
+     if(d<85)pvpHostDamage('host');
+   }
+   return;
+ }
+ if(msg.type==='sync'&&pvp.role==='guest'&&pvp.active&&Number.isInteger(msg.round)&&msg.round>=pvp.round){
+   if(!msg.score||!msg.health)return;
+   const oldHealth=health;
+   pvp.score={host:clamp(Number(msg.score.host)||0,0,3),guest:clamp(Number(msg.score.guest)||0,0,3)};
+   pvp.health={host:clamp(Number(msg.health.host)||0,0,100),guest:clamp(Number(msg.health.guest)||0,0,100)};
+   pvp.round=msg.round;health=pvp.health.guest;
+   if(health<oldHealth){damageAlpha=1;recoil=Math.min(1,recoil+.15)}
+   if(msg.reset){pvpResetPositions();say('ROUND '+pvp.round+' • FIRST TO THREE',1.9)}
+   pvpUpdateScore();updateHUD();
+   return;
+ }
+ if(msg.type==='finish'&&pvp.role==='guest'&&pvp.active){
+   if(msg.score)pvp.score={host:clamp(Number(msg.score.host)||0,0,3),guest:clamp(Number(msg.score.guest)||0,0,3)};
+   if(msg.winner==='host'||msg.winner==='guest')pvpFinish(msg.winner);
+ }
+}
+function pvpTick(dt){
+ const b=pvp.remote;
+ if(b){
+   const t=Math.min(1,dt*15);
+   b.x+=(b.targetX-b.x)*t;b.z+=(b.targetZ-b.z)*t;
+   b.holder.position.set(b.x,0,b.z);
+   const a=b.targetYaw+Math.PI;
+   const diff=Math.atan2(Math.sin(a-b.body.rotation.y),Math.cos(a-b.body.rotation.y));
+   b.body.rotation.y+=diff*Math.min(1,dt*15);
+   b.shootAnim=Math.max(0,b.shootAnim-dt);
+   if(!b.animationFailed){
+     try{animateEnemyWeapon(b,dt)}
+     catch(e){b.animationFailed=true;console.warn('Opponent FBX animation:',e)}
+   }else if(b.mixer)b.mixer.update(dt);
+ }
+ if(elapsed>=pvp.nextStateAt){
+   pvp.nextStateAt=elapsed+.05;
+   pvpSend({type:'state',round:pvp.round,x:PLAYER.x,z:PLAYER.z,yaw,
+     moving:!!(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD)});
+ }
+}
+$('createLobbyButton').onclick=pvpOpenCreate;
+$('joinLobbyButton').onclick=pvpOpenJoin;
+$('createOneVOne').onclick=pvpCreateRoom;
+$('createLobbyBack').onclick=pvpLeave;
+$('joinLobbyBack').onclick=pvpLeave;
+$('joinLobbySubmit').onclick=pvpJoinRoom;
+$('joinLobbyCode').addEventListener('keydown',e=>{if(e.key==='Enter')pvpJoinRoom()});
+$('copyLobbyCode').onclick=()=>{
+ if(!pvp.code)return;
+ if(navigator.clipboard?.writeText)navigator.clipboard.writeText(pvp.code).catch(()=>window.prompt('Copy lobby code:',pvp.code));
+ else window.prompt('Copy lobby code:',pvp.code);
+};
+$('hostStartMatch').onclick=()=>{
+ if(pvp.role!=='host'||!pvp.connected||!pvp.conn?.open||!template)return;
+ pvpSend({type:'start'});
+ pvpStart();
+};
+
 function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
  if(mood==='playing'){elapsed+=dt;updateReload();let aiming=rightHeld;aimAmount+=(Number(aiming)-aimAmount)*Math.min(1,dt*10);camera.fov=baseFov*(1-.40*aimAmount);camera.updateProjectionMatrix();$('reticle').classList.toggle('aim',aimAmount>.42);
@@ -576,8 +936,10 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFram
  vY-=19.5*dt;eyeY+=vY*dt;if(eyeY<1.65){eyeY=1.65;vY=0}camera.position.set(PLAYER.x,eyeY,PLAYER.z);camera.rotation.set(pitch,yaw,0,'YXZ');
  // The O cheat freezes enemy movement, targeting, gun/FBX animations and firing,
  // but continues player movement, aiming, reloads, and shooting.
- if(!aiFrozen)for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
- }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}render(dt)}
+ if(matchMode==='pvp')pvpTick(dt);else if(!aiFrozen)for(const b of enemies)botUpdate(b,dt);if(hitTimer>0){hitTimer-=dt;if(hitTimer<=0)$('hitmark').style.opacity=0}if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('message').style.opacity=0}damageAlpha=Math.max(0,damageAlpha-dt*2.9);recoil=Math.max(0,recoil-dt*5.8);flash=Math.max(0,flash-dt*12);updateHUD();
+ }else if(mood==='menu'){camera.position.set(0,9,23);camera.lookAt(0,0,-3)}
+ if(pvp.finished){const seconds=Math.max(0,Math.ceil((pvp.returnAt-performance.now())/1000));$('pvpReturnTimer').textContent='Returning to main menu in '+seconds+' seconds...';if(performance.now()>=pvp.returnAt)menu()}
+ render(dt)}
 const stage=$('stage');
 addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){
  if($('thankYouPanel').style.display==='block'){setPanel('settings');return}
@@ -586,13 +948,13 @@ addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','Ar
  else if(mood==='paused'){mood='playing';setPanel(null);requestGameMouse()}
 }
 if(mood!=='playing')return;
-if(e.code==='KeyP'&&cheatsEnabled){
+if(e.code==='KeyP'&&cheatsEnabled&&matchMode==='solo'){
  infiniteHealth=!infiniteHealth;
  if(infiniteHealth)health=100;
  updateHUD();say(infiniteHealth?'INFINITE HEALTH ENABLED':'INFINITE HEALTH DISABLED',2);
  return;
 }
-if(e.code==='KeyO'&&cheatsEnabled){
+if(e.code==='KeyO'&&cheatsEnabled&&matchMode==='solo'){
  aiFrozen=!aiFrozen;
  updateHUD();say(aiFrozen?'ENEMY AI FROZEN — PRESS O TO RESUME':'ENEMY AI RESUMED',2);
  return;
