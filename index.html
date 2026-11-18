@@ -65,7 +65,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
 <div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>ARENA SHOOTER</small></div><div class="micro" id="assetBadge">ARENA • READY</div></div><div><span class="stat"><b id="kills">0 / 5</b><small id="killsLabel">BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="pvpHud">1V1 • YOU 0 – 0 OPPONENT • FIRST TO 3</div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span><span id="aiFrozenIndicator"> ❄ AI FROZEN (O TO UNFREEZE)</span></div></div>
 <div id="overlay"><div class="panel" id="menuPanel"><h1>DUST<span>LINE.</span></h1><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="statusWrap"><div id="status" role="status">Preparing the arena…</div><button type="button" id="statusClose" aria-label="Dismiss ready message" title="Dismiss" hidden>×</button></div><button class="primary" id="play" data-menu-hint="Take on 5 armed opponents in a timed battle." disabled>LOADING MODELS...</button><button class="secondary" id="createLobbyButton" data-menu-hint="Create an arena to battle your friends." disabled>CREATE LOBBY</button><button class="secondary" id="joinLobbyButton" data-menu-hint="Join an arena to battle your friends." disabled>JOIN LOBBY</button><button class="secondary" id="openSettingsMenu" data-menu-hint="Calibrate before the showdown.">SETTINGS ⚙</button><div id="menuHoverHint" class="menu-hover-hint" aria-live="polite"></div></div><div class="panel" id="createLobbyPanel" style="display:none">
-<h1>CREATE <span>LOBBY.</span></h1>
+<h1>CREATE <span>LOBBY</span></h1>
 <p>Choose 1v1, share your code, and start when your opponent joins. You're already player one.</p>
 <button class="primary" id="createOneVOne">1V1 • FIRST TO 3</button>
 <div id="hostLobbyInfo" style="display:none">
@@ -77,7 +77,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 </div>
 <button class="secondary" id="createLobbyBack">BACK TO MAIN MENU</button>
 </div><div class="panel" id="joinLobbyPanel" style="display:none">
-<div class="eyebrow">ONLINE • JOIN</div><h1>JOIN <span>LOBBY.</span></h1>
+<div class="eyebrow">ONLINE • JOIN</div><h1>JOIN <span>LOBBY</span></h1>
 <p>Enter the six-character code from your host to join their 1v1 match.</p>
 <label for="joinLobbyCode" class="eyebrow">LOBBY CODE</label>
 <input class="lobby-input" id="joinLobbyCode" type="text" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABC234" aria-label="Lobby code"/>
@@ -86,12 +86,12 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <button class="secondary" id="joinLobbyBack">BACK TO MAIN MENU</button>
 </div><div class="panel" id="pvpResultPanel" style="display:none">
 <div class="eyebrow" id="pvpResultTag">MATCH COMPLETE</div>
-<h1 id="pvpResultTitle">YOU WON.</h1>
+<h1 id="pvpResultTitle">YOU WON</h1>
 <p>First to three eliminations.</p>
 <div class="pvp-outcome" id="pvpResultScore">FINAL SCORE 3 – 0</div>
 <div id="pvpReturnTimer">Returning to main menu in 5 seconds...</div>
-</div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">TEMPORARY HOLD</div><h1>PAUSED.</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="openSettingsPause">SETTINGS ⚙</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="settingsPanel" style="display:none">
-<div class="eyebrow">PERSONALIZE YOUR GAME</div><h1>SETTINGS<span>.</span></h1>
+</div><div class="panel" id="pausePanel" style="display:none"><div class="eyebrow">TEMPORARY HOLD</div><h1>PAUSED</h1><p>The bots and animation are stopped.</p><button class="primary" id="resume">RESUME ▶</button><button class="secondary" id="openSettingsPause">SETTINGS ⚙</button><button class="secondary" id="back">MAIN MENU</button></div><div class="panel" id="settingsPanel" style="display:none">
+<div class="eyebrow">PERSONALIZE YOUR GAME</div><h1>SETTINGS</h1>
 <div class="controls-guide">
 <h2>CONTROLS</h2>
 <div class="controls-grid">
@@ -111,12 +111,12 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 <button class="secondary" id="openThankYou">THANK YOU / CREDITS ★</button>
 <button class="primary" id="settingsBack">BACK ▶</button>
 </div><div class="panel" id="thankYouPanel" style="display:none">
-<div class="eyebrow">SPECIAL THANKS</div><h1>THANK <span>YOU.</span></h1>
+<div class="eyebrow">SPECIAL THANKS</div><h1>THANK <span>YOU</span></h1>
 <p class="thank-you-text">Thank you to <strong>TORI106</strong> on SketchFab for gun models &amp; the people at <strong>Mixamo</strong> for animations and skeletons!</p>
 <p class="thank-you-text">Thank you to <strong>MoCap Online</strong> for their "Free Pistol Animation Pack"</p>
 <div class="thank-you-links"><a href="https://sketchfab.com/3d-models/9mm-pistol-43bc09f5aace4346a8a2b6e1580fc03f" target="_blank" rel="noopener noreferrer">9mm Pistol by TORI106 (Sketchfab)</a><a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer">Mixamo</a><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></div>
 <button class="primary" id="thankYouBack">BACK TO SETTINGS ▶</button>
-</div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR.</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · preparing arena</div>
+</div><div class="panel" id="endPanel" style="display:none"><div class="eyebrow" id="endTag">MISSION COMPLETE</div><h1 id="endTitle">ARENA CLEAR</h1><p id="endDesc">All enemy bots eliminated.</p><div id="endstats"></div><button class="primary" id="again">PLAY AGAIN ▶</button><button class="secondary" id="endBack">MAIN MENU</button></div></div><div id="loader">DUSTLINE · preparing arena</div>
 
 
 <script>
@@ -617,7 +617,7 @@ document.addEventListener('pointerlockchange',()=>{
 let hadMouseLock=false;
 function start(){if(pvp.peer||pvp.remote)pvpShutdown();matchMode='solo';if(!template){$('status').textContent='The arena is still loading. Please try again.';return}
  mood='playing';elapsed=0;kills=0;health=100;infiniteHealth=false;aiFrozen=false;$('assetBadge').textContent='SOLO • ARENA';PLAYER.x=0;PLAYER.z=16;eyeY=1.65;vY=0;yaw=0;pitch=0;recoil=0;aimAmount=0;rightHeld=false;shootHeld=false;reloadEnd=0;nextShot=0;weapon.mag=weapon.max;weapon.stock=75;spawn();setPanel(null);updateHUD();requestGameMouse();say('FIVE OPPONENTS • SURVIVE THE ARENA',2.6)}
-function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'OBJECTIVES COMPLETE':'OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR.':'MISSION FAILED.';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
+function endGame(win){mood=win?'won':'lost';shootHeld=false;rightHeld=false;setPanel('end');releaseGameMouse();$('endTag').textContent=win?'OBJECTIVES COMPLETE':'OPERATOR DOWN';$('endTitle').textContent=win?'ARENA CLEAR':'MISSION FAILED';$('endDesc').textContent=win?'All five enemy bots were eliminated.':'Try again on an easier difficulty.';$('endstats').textContent=kills+' / 5 eliminations  ·  '+$('clock').textContent+'  ·  '+difficulty.toUpperCase()}
 function pause(){if(mood!=='playing')return;mood='paused';shootHeld=false;rightHeld=false;for(const key in keys)keys[key]=false;$('pausePanel').querySelector('p').textContent=matchMode==='pvp'?'The online match keeps running while you are paused.':'The bots and animation are stopped.';$('back').textContent=matchMode==='pvp'?'LEAVE 1V1':'MAIN MENU';setPanel('pause');releaseGameMouse()}
 function menu(){if(pvp.peer||pvp.remote)pvpShutdown();mood='menu';shootHeld=false;rightHeld=false;setPanel('menu');releaseGameMouse()}
 function reload(){const w=weapon;if(w.mag===w.max||w.stock<=0||reloadEnd>elapsed)return;reloadEnd=elapsed+1.25;say('RELOADING',.7)}
@@ -980,7 +980,7 @@ function pvpFinish(winner,reason){
  mood='pvpFinished';rightHeld=false;shootHeld=false;
  const me=pvp.role||'host',them=me==='host'?'guest':'host';
  $('pvpResultTag').textContent=winner?'1V1 MATCH COMPLETE':'CONNECTION ENDED';
- $('pvpResultTitle').textContent=winner?(winner===me?'YOU WON.':'YOU LOST.'):(reason||'MATCH ENDED');
+ $('pvpResultTitle').textContent=winner?(winner===me?'YOU WON':'YOU LOST'):(reason||'MATCH ENDED');
  $('pvpResultScore').textContent='FINAL SCORE '+pvp.score[me]+' – '+pvp.score[them];
  setPanel('pvpResult');releaseGameMouse();
  $('pvpReturnTimer').textContent='Returning to main menu in 5 seconds...';
