@@ -336,31 +336,65 @@ const pistolHandPosition=new THREE.Vector3();
 const pistolGripOffset=new THREE.Vector3();
 const pistolWorldRotation=new THREE.Quaternion();
 const pistolYAxis=new THREE.Vector3(0,1,0);
+const PISTOL_PALM_REACH=.72; // Wrist toward finger-base joints, center of left palm.
+const pistolPalmCenter=new THREE.Vector3();
+const pistolPalmJointPosition=new THREE.Vector3();
+const pistolPalmWrist=new THREE.Vector3();
+const PISTOL_LEFT_KNUCKLES=new Set([
+ 'lefthandindex1','lefthandmiddle1','lefthandring1','lefthandpinky1'
+]);
 function makeEnemyPistol(b){
  if(!pistolTemplate)return;
- const hand=b.rightHand;
+ const hand=b.leftHand;
  if(!hand){
-   console.warn('DUSTLINE: cannot attach GLB pistol; no right-hand bone');
+   console.warn('DUSTLINE: cannot attach GLB pistol; no left-hand bone');
    return;
  }
- // Set the real holding pose BEFORE calculating the hand socket. This is the
- // shooting animation's already-armed frame in PvP, or the guard pose in solo.
- // No changes to the gun/hand transform are needed after this initial bind.
+ // Sample the character's held-gun pose ONCE, before binding the pistol.
+ // PvP uses the first shooting frame; solo uses the guard pose.
  for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
+ b.rig.updateMatrixWorld(true);
+
+ // Mixamo's LeftHand bone is at the WRIST, not the center of the palm.
+ // Find the four first finger joints (knuckles) and move the grip 72% of
+ // the way from the wrist toward their average. This places the weapon in
+ // FRONT of the wrist, in the actual left palm, without guessing hand axes.
  hand.getWorldPosition(pistolHandPosition);
+ pistolPalmWrist.copy(pistolHandPosition);
+ pistolPalmCenter.set(0,0,0);
+ let knuckleCount=0,forearm=null;
+ b.rig.traverse(bone=>{
+   if(!bone.isBone)return;
+   const name=poseBoneId(bone.name);
+   if(PISTOL_LEFT_KNUCKLES.has(name)){
+     bone.getWorldPosition(pistolPalmJointPosition);
+     pistolPalmCenter.add(pistolPalmJointPosition);
+     knuckleCount++;
+   }else if(name==='leftforearm')forearm=bone;
+ });
+ if(knuckleCount>0){
+   pistolPalmCenter.multiplyScalar(1/knuckleCount);
+   pistolHandPosition.lerp(pistolPalmCenter,PISTOL_PALM_REACH);
+ }else if(forearm){
+   // Rig without knuckle bones: extend the forearm through the wrist.
+   forearm.getWorldPosition(pistolPalmJointPosition);
+   pistolPalmCenter.copy(pistolPalmWrist).sub(pistolPalmJointPosition);
+   if(pistolPalmCenter.lengthSq()>1e-8)
+     pistolHandPosition.add(pistolPalmCenter.normalize().multiplyScalar(.055));
+ }
+
  pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
  pistolGripOffset.copy(pistolGripLocal).multiplyScalar(pistolWorldScale).applyQuaternion(pistolWorldRotation);
-
- const gun=pistolTemplate.clone(true); // Reuse the textured real GLB.
- gun.name='DUSTLINE_HAND_PISTOL';
+ const gun=pistolTemplate.clone(true); // Real textured GLB.
+ gun.name='DUSTLINE_LEFT_PALM_PISTOL';
  gun.scale.setScalar(pistolWorldScale);
  gun.position.copy(pistolHandPosition).sub(pistolGripOffset);
  gun.quaternion.copy(pistolWorldRotation);
 
- // Object3D.attach preserves the calibrated WORLD grip/orientation/scale,
- // then converts them to a fixed LOCAL transform under the hand bone.
- // The skeletal hierarchy subsequently carries the pistol every frame,
- // including during jump, turning, and the shooting animation's recoil.
+ // Calibrate once in world space, then attach to the left-hand WRIST bone.
+ // The local offset reaches into the palm, remaining fixed as the wrist,
+ // finger joints, character, and shooting animation move. No per-frame
+ // re-positioning and no stutter.
  scene.add(gun);
  hand.attach(gun);
  gun.visible=false;
@@ -577,7 +611,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  rig.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;child.frustumCulled=false;}});
  const hit=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.05,4,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));hit.position.y=1.04;holder.add(hit);
  const bot={id:i,x,z,r:.55,hp:100,alive:true,holder,body,rig,hit,
-  mixer:null,guardPose:[],shootPose:[],pistol:null,rightHand:null,
+  mixer:null,guardPose:[],shootPose:[],pistol:null,leftHand:null,
   shootDelay:rnd(.5,2),strafe:Math.random()<.5?-1:1,turnAt:rnd(2,4),time:rnd(0,6),
   moving:true,readyProgress:0,unseenFor:HOLSTER_AFTER_SECONDS,
   weaponState:'guard',shootAnim:0,
@@ -591,7 +625,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  }
  bot.guardPose=buildGuardPose(rig);
  bot.shootPose=buildFBXPoseSampler(shootClip,rig);
- rig.traverse(o=>{if(o.isBone&&poseBoneId(o.name)==='righthand')bot.rightHand=o});
+ rig.traverse(o=>{if(o.isBone&&poseBoneId(o.name)==='lefthand')bot.leftHand=o});
  makeEnemyPistol(bot);
  if(shootClip&&bot.shootPose.length===0)console.warn('DUSTLINE: shooting FBX tracks did not match character bones');
  enemies.push(bot);
@@ -938,11 +972,11 @@ function pvpCreateOpponent(){
  const pvpReadyPose=buildPvPReadyPose(rig,pvpShootPose);
  const bot={alive:true,x:pos.x,z:pos.z,y:0,holder,body,rig,hit,mixer:null,action:null,
    guardPose:pvpReadyPose,shootPose:pvpShootPose,
-   shootAnim:0,moving:false,weaponState:'armed',pistol:null,rightHand:null,
+   shootAnim:0,moving:false,weaponState:'armed',pistol:null,leftHand:null,
    targetX:pos.x,targetZ:pos.z,targetY:0,targetYaw:pos.yaw,animationFailed:false,
    jumpStage:null,jumpProgress:0,jumpBones:null,standingAvatar:true,
    idlePhase:0,turnPhase:0,turnDir:0,lastTurnDir:0,turnBlend:0,standBlend:0};
- rig.traverse(obj=>{if(obj.isBone&&poseBoneId(obj.name)==='righthand')bot.rightHand=obj});
+ rig.traverse(obj=>{if(obj.isBone&&poseBoneId(obj.name)==='lefthand')bot.leftHand=obj});
  bot.jumpBones=buildJumpBindings(rig,bot.guardPose);
  if(walkingClip){
    bot.mixer=new THREE.AnimationMixer(rig);
