@@ -314,6 +314,18 @@ function buildFBXPoseSampler(clip,rig){
  }
  return channels;
 }
+// Multiplayer players start and stay in the first (already aiming) frame of
+// the shooting FBX. No Drawing_Gun_Animation frames play in a PvP match.
+// Preserve the old guard pose as a fallback for bones missing in the shoot clip.
+function buildPvPReadyPose(rig,shootChannels){
+ const ready=new Map(buildGuardPose(rig).map(({bone,quat})=>[bone,quat]));
+ for(const {bone,sampler} of shootChannels){
+   const frame=sampler.evaluate(0); // Gun already raised, before recoil.
+   if(frame&&frame.length>=4)
+     ready.set(bone,new THREE.Quaternion().fromArray(frame).normalize());
+ }
+ return Array.from(ready,([bone,quat])=>({bone,quat}));
+}
 // User-supplied Sketchfab "9mm Pistol" glb. Reuse its actual meshes and PBR
 // textures for all enemies. Its native long axis is -X (muzzle direction),
 // so rotate +90 degrees around Y to point toward the AI's local +Z facing.
@@ -509,9 +521,10 @@ function animateEnemyWeapon(b,dt){
  if(b.action)b.action.timeScale=b.moving&&!b.jumpStage?1:0;
  if(b.mixer)b.mixer.update(dt);
 
- // EXACT FINAL FRAME: bone rotations copied after the walking mixer on every
- // frame. Every upper-body and finger joint matches the Drawing Gun FBX's
- // last keyframe; legs remain controlled by walking. Shooting blends over it.
+ // Restore the always-armed base pose every frame. Single-player bots retain
+ // the original final-frame guard stance, while PvP opponents use the first
+ // (already aiming, pre-recoil) frame of the real shooting animation.
+ // Walking owns the legs; a fired shot briefly overlays the shooting FBX.
  for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
  // Three-stage jump is applied after the held-gun stance, but before firing.
  if(b.jumpStage)applyJumpPose(b);
@@ -921,9 +934,11 @@ function pvpCreateOpponent(){
    depthWrite:false,colorWrite:false,side:THREE.DoubleSide}));
  hit.position.y=1.04;holder.add(hit);
  const pos=pvpSpawn(pvp.role==='host'?'guest':'host');
+ const pvpShootPose=buildFBXPoseSampler(shootClip,rig);
+ const pvpReadyPose=buildPvPReadyPose(rig,pvpShootPose);
  const bot={alive:true,x:pos.x,z:pos.z,y:0,holder,body,rig,hit,mixer:null,action:null,
-   guardPose:buildGuardPose(rig),shootPose:buildFBXPoseSampler(shootClip,rig),
-   shootAnim:0,moving:false,weaponState:'guard',pistol:null,rightHand:null,
+   guardPose:pvpReadyPose,shootPose:pvpShootPose,
+   shootAnim:0,moving:false,weaponState:'armed',pistol:null,rightHand:null,
    targetX:pos.x,targetZ:pos.z,targetY:0,targetYaw:pos.yaw,animationFailed:false,
    jumpStage:null,jumpProgress:0,jumpBones:null,standingAvatar:true,
    idlePhase:0,turnPhase:0,turnDir:0,lastTurnDir:0,turnBlend:0,standBlend:0};
