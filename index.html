@@ -449,6 +449,13 @@ function applyJumpPose(b){
 }
 // Source-derived MoCap Online idle / left-turn / right-turn poses.
 // Keep the original Mixamo rig. Body/world yaw remains driven by WebRTC.
+// Never play the MoCap turning/idle leg or foot rotations on an onlooker.
+// The avatar faces its networked yaw as a single in-place turn, with planted
+// lower-body joints instead of animated stepping.
+const STANDING_PLANTED_BONES=new Set([
+ 'hips','leftupleg','leftleg','leftfoot','lefttoebase',
+ 'rightupleg','rightleg','rightfoot','righttoebase'
+]);
 const standQIdle=new THREE.Quaternion(),standQTurn=new THREE.Quaternion();
 const standQNext=new THREE.Quaternion(),standQTarget=new THREE.Quaternion();
 function sampleStandDelta(clip,frame,bone,out){
@@ -481,6 +488,12 @@ function applyStandingAnimations(b,dt){
  const turnFrame=b.turnPhase/turn.duration*(turn.frames-1);
  for(let i=0;i<b.jumpBones.length;i++){
    const binding=b.jumpBones[i];if(!binding)continue;
+   if(STANDING_PLANTED_BONES.has(JUMP_BONES[i])){
+     // Park both legs and feet in their original pose whenever the player
+     // is standing. Walk cycles only affect the legs while actually moving.
+     binding.bone.quaternion.slerp(binding.base,b.standBlend);
+     continue;
+   }
    sampleStandDelta(idle,idleFrame,i,standQIdle);
    if(b.turnBlend>.0001){
      sampleStandDelta(turn,turnFrame,i,standQTurn);
