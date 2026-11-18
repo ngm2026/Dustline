@@ -44,7 +44,7 @@ The original uploaded **W1_Stand_Aim_Jump_Start_IPC.fbx**, **W1_Stand_Aim_Jump_A
 - **Air**: ~0.61 seconds, based on 13 samples from the 2.0-second source clip
 - **End**: ~0.19 seconds after landing, based on nine samples from the 0.93-second source clip
 - The game synchronizes each player's jump height in the existing ~20 Hz WebRTC updates; the other player's model rises and lands instead of standing still on the ground
-- The 9mm pistol retains its grip position and follows the right hand's animated **rotation**, including during take-off, airborne movement, landing, and gunfire
+- The 9mm pistol's grip is anchored toward the **front of the left palm**, parented under the left-hand wrist bone, and follows that hand during take-off, airborne movement, landing, and gunfire
 - The normal walking animation is paused during a jump; gunfire can still temporarily blend over the jump pose
 - The jump timings can be adjusted in `JUMP_PHASE_DURATION` in `index.html`, and the actual vertical arc follows the original 7.5 initial velocity and 19.5 gravity physics
 
@@ -72,4 +72,4 @@ During multiplayer 1v1, the remote opponent **always holds their pistol up**. Th
 
 ## Pistol attachment — no frame-by-frame stutter
 
-The textured GLB pistol is now **parented to the Mixamo right-hand bone** using Three.js `Object3D.attach`, rather than following through world-space position/quaternion assignments every render tick. The pistol's original grip alignment, orientation, and world scale are calibrated once at character creation, after the PvP avatar is placed and facing its initial direction. The joint hierarchy carries the gun during walking, stationary turns, jumps, and shot recoil. The same attachment and safe cleanup also apply to the solo bot models. This is an animation hierarchy fix; a live two-browser check is still advised to verify the final visual alignment.
+The textured GLB pistol is **parented to the Mixamo left-hand wrist bone** using Three.js `Object3D.attach`, rather than following through world-space position/quaternion assignments every render tick. Since the wrist joint is not in the palm, the one-time grip calibration samples the base joints of the left index, middle, ring, and pinky fingers and positions the grip about 72% of the way from the wrist toward their average. That moves the pistol **to the front of the left palm**, not the wrist pivot. Rigs lacking usable finger joints fall back to extending the forearm direction slightly beyond the wrist. The original pistol model and its forward-facing orientation are preserved. Its offset then remains fixed in left-hand space, so the skeletal hierarchy carries it through walking, stationary turns, jumps, and recoil, without per-frame world-space repositioning. This applies to PvP and solo bot models. The new palm alignment should be checked visually in a live two-player session.
