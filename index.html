@@ -336,7 +336,6 @@ const pistolHandPosition=new THREE.Vector3();
 const pistolGripOffset=new THREE.Vector3();
 const pistolWorldRotation=new THREE.Quaternion();
 const pistolYAxis=new THREE.Vector3(0,1,0);
-const pistolHandQuaternion=new THREE.Quaternion();
 function makeEnemyPistol(b){
  if(!pistolTemplate)return;
  const hand=b.rightHand;
@@ -344,34 +343,35 @@ function makeEnemyPistol(b){
    console.warn('DUSTLINE: cannot attach GLB pistol; no right-hand bone');
    return;
  }
- b.pistol=pistolTemplate.clone(true); // Shares the imported mesh/texture data.
- b.pistol.scale.setScalar(pistolWorldScale);
- b.pistol.visible=false;
- b.pistolHandMountQuat=null;
- scene.add(b.pistol);
+ // Set the real holding pose BEFORE calculating the hand socket. This is the
+ // shooting animation's already-armed frame in PvP, or the guard pose in solo.
+ // No changes to the gun/hand transform are needed after this initial bind.
+ for(const channel of b.guardPose)channel.bone.quaternion.copy(channel.quat);
+ hand.getWorldPosition(pistolHandPosition);
+ pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
+ pistolGripOffset.copy(pistolGripLocal).multiplyScalar(pistolWorldScale).applyQuaternion(pistolWorldRotation);
+
+ const gun=pistolTemplate.clone(true); // Reuse the textured real GLB.
+ gun.name='DUSTLINE_HAND_PISTOL';
+ gun.scale.setScalar(pistolWorldScale);
+ gun.position.copy(pistolHandPosition).sub(pistolGripOffset);
+ gun.quaternion.copy(pistolWorldRotation);
+
+ // Object3D.attach preserves the calibrated WORLD grip/orientation/scale,
+ // then converts them to a fixed LOCAL transform under the hand bone.
+ // The skeletal hierarchy subsequently carries the pistol every frame,
+ // including during jump, turning, and the shooting animation's recoil.
+ scene.add(gun);
+ hand.attach(gun);
+ gun.visible=false;
+ b.pistol=gun;
 }
 function updateEnemyPistol(b){
  if(!b.pistol)return;
- // Hide the pistol DURING drawing. Show it when held/ready and during shots.
- // The current AI keeps the final draw-pose as its normal holding stance.
+ // The pistol never receives per-frame position or rotation assignments.
+ // It follows the animated bone via the scene graph, preventing stutter.
  const state=b.weaponState;
  b.pistol.visible=b.alive&&(b.shootAnim>0||state==='guard'||state==='holding'||state==='armed')&&state!=='drawing';
- if(!b.pistol.visible)return;
- // Calibrate the original barrel-forward orientation once, then rotate the
- // REAL pistol with the animated wrist. The weapon keeps its grip during
- // jump start, airborne, landing, and shooting poses.
- b.rightHand.getWorldPosition(pistolHandPosition);
- b.rightHand.getWorldQuaternion(pistolHandQuaternion);
- if(!b.pistolHandMountQuat){
-   pistolWorldRotation.setFromAxisAngle(pistolYAxis,b.body.rotation.y+Math.PI/2);
-   b.pistolHandMountQuat=pistolHandQuaternion.clone().invert().multiply(pistolWorldRotation);
- }
- pistolWorldRotation.copy(pistolHandQuaternion).multiply(b.pistolHandMountQuat);
- b.pistol.quaternion.copy(pistolWorldRotation);
- pistolGripOffset.copy(pistolGripLocal).multiplyScalar(pistolWorldScale).applyQuaternion(pistolWorldRotation);
- // Keep the grip in the hand, rather than placing the gun on the floor,
- // behind the character, or at a fixed world-space offset.
- b.pistol.position.copy(pistolHandPosition).sub(pistolGripOffset);
 }
 async function loadPistolModel(){
  try{
@@ -596,7 +596,7 @@ function createBot(i,x,z){const rig=cloneSkinned(template);const holder=new THRE
  if(shootClip&&bot.shootPose.length===0)console.warn('DUSTLINE: shooting FBX tracks did not match character bones');
  enemies.push(bot);
 }
-function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.pistol)scene.remove(b.pistol);if(b.mixer)b.mixer.stopAllAction()}enemies=[];
+function spawn(){for(const b of enemies){scene.remove(b.holder);if(b.pistol)b.pistol.removeFromParent();if(b.mixer)b.mixer.stopAllAction()}enemies=[];
  [[-17,-18],[16,-17],[-18,9],[17,11],[0,-23]].forEach((p,i)=>createBot(i,p[0],p[1]));
 }
 function updateHUD(){$('hp').textContent=infiniteHealth?'∞':Math.max(0,Math.ceil(health));$('godIndicator').style.display=infiniteHealth?'block':'none';$('aiFrozenIndicator').style.display=aiFrozen?'block':'none';$('kills').textContent=matchMode==='pvp'?(pvp.score.host+' – '+pvp.score.guest):(`${kills} / 5`);$('killsLabel').textContent=matchMode==='pvp'?'HOST – GUEST':'BOTS ELIMINATED';$('ammo').textContent=weapon.mag;$('reserve').textContent=' / '+weapon.stock;$('gunName').textContent=weapon.name;$('clock').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
@@ -774,7 +774,7 @@ function pvpStatus(message){
 function pvpRemoveRemote(){
  if(!pvp.remote)return;
  scene.remove(pvp.remote.holder);
- if(pvp.remote.pistol)scene.remove(pvp.remote.pistol);
+ if(pvp.remote.pistol)pvp.remote.pistol.removeFromParent();
  if(pvp.remote.mixer)pvp.remote.mixer.stopAllAction();
  pvp.remote=null;
 }
@@ -911,7 +911,7 @@ function pvpLocalJumpState(){
 function pvpRemoveBots(){
  for(const bot of enemies){
    scene.remove(bot.holder);
-   if(bot.pistol)scene.remove(bot.pistol);
+   if(bot.pistol)bot.pistol.removeFromParent();
    if(bot.mixer)bot.mixer.stopAllAction();
  }
  enemies=[];
@@ -949,8 +949,10 @@ function pvpCreateOpponent(){
    bot.action=bot.mixer.clipAction(walkingClip);
    bot.action.setLoop(THREE.LoopRepeat);bot.action.play();
  }
- makeEnemyPistol(bot);
+ // Establish the PvP facing and spawn location before calibrating the gun
+ // socket; otherwise the first-frame wrist orientation is inconsistent.
  holder.position.set(pos.x,0,pos.z);body.rotation.y=pos.yaw+Math.PI;
+ makeEnemyPistol(bot);
  return bot;
 }
 function pvpResetPositions(){
