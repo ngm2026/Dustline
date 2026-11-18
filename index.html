@@ -430,7 +430,8 @@ function applyJumpPose(b){
    }
    if(phase==='start'){
      // Gentle lift from the standing pose instead of a sudden sideways snap.
-     jumpQuatA.slerpQuaternions(jumpNeutral,jumpQuatA,clamp(age/JUMP_CROSSFADE_SECONDS,0,1));
+     jumpQuatBefore.copy(jumpNeutral).slerp(jumpQuatA,clamp(age/JUMP_CROSSFADE_SECONDS,0,1));
+     jumpQuatA.copy(jumpQuatBefore);
    }else if(phase==='end'){
      // Fade back to the original held-gun pose before the jump state ends.
      const remaining=duration-age;
