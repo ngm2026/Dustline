@@ -11,7 +11,7 @@ DUSTLINE now supports two-browser 1v1 duels with a short room code. Existing sin
 5. Host presses **START MATCH**. The two players enter the arena at opposite ends.
 6. Shoot the opponent; after each elimination both players respawn. **First to three eliminations wins**. Both browsers show **YOU WON.** or **YOU LOST.** and return to the main menu after five seconds.
 
-The remote player is rendered with the regular enemy character/skeleton, Mixamo walking cycle, final-frame guard pose, real shooting animation and Sketchfab pistol GLB. There are **no special aim or strafe animations**. Enemy AI is disabled in this mode. The P/O cheats are available only in single-player.
+The remote player is rendered with the regular enemy character/skeleton, Mixamo walking cycle, permanently raised pistol pose from the first shooting-animation frame, shot-triggered recoil and Sketchfab pistol GLB. There are **no special aim or strafe animations**. Enemy AI is disabled in this mode. The P/O cheats are available only in single-player.
 
 ## Networking
 
@@ -58,10 +58,14 @@ The following user-supplied binary FBXs were parsed, sampled, and retargeted int
 - `W1_Stand_Aim_Turn_In_Place_L_Loop_IPC.fbx`: 0.667-second loop, 13 resampled pose frames; shown when the remote player stands still and turns left using their mouse or horizontal-look controls
 - `W1_Stand_Aim_Turn_In_Place_R_Loop_IPC.fbx`: 0.667-second loop, 13 resampled pose frames; same for turning right
 
-All three use the uploaded **MotusMan** skeleton. Their 22 mapped body-joint rotations were sampled **relative to the common starting idle pose** and blended onto the existing Mixamo body, so the current character and gun models are not replaced. The turn animations include the legs, spine, arms, and wrists. Smooth blending is applied when stopping, beginning to turn, and resuming movement. Both idle and turns preserve the player's real textured pistol: the gun's grip remains at the animated hand, and its orientation follows the wrist.
+All three use the uploaded **MotusMan** skeleton. Their 22 mapped body-joint rotations were sampled **relative to the common starting idle pose** and blended onto the existing Mixamo body, so the current character and gun models are not replaced. The standing turn poses keep the hips, legs, and feet planted while the body rotates to face the networked yaw; upper-body and wrist articulation remains animated. Smooth blending is applied when stopping, beginning to turn, and resuming movement. Both idle and turns preserve the player's real textured pistol: the gun's grip remains at the animated hand, and its orientation follows the wrist.
 
 **Animation priority:** jumping (Start / Air / End) takes precedence, then normal walking while moving, then idle / turning while stationary. The existing firing animation overlays all of those states when the player shoots.
 
 Turn direction is detected from changes in local camera yaw, encoded in the existing 20 Hz WebRTC player-state messages. Positional movement and facing are still controlled by the networked state, not by root motion in the animation FBXs. These clips are **source-derived resampled retargets**, not byte-for-byte FBX animation playback.
 
 MoCap Online is thanked in DUSTLINE's **Settings → Thank You / Credits** screen for its **Free Pistol Animation Pack**. Source animation and texture alignment should still be reviewed in a live two-player visual test.
+
+## Always-armed PvP opponents and shot recoil
+
+During multiplayer 1v1, the remote opponent **always holds their pistol up**. Their base upper-body/hand pose is the ready-to-fire **first frame of the actual Shooting_Animation.fbx**, not the Drawing_Gun_Animation.fbx sequence. There is no multiplayer draw or holster transition. The existing hand-mounted GLB remains visible during walking, idle, stationary turns, and jumps. When the player fires, the full firing clip blends over the held-gun pose for recoil and smoothly returns to the same ready position. Five-bot single-player animation behavior is unchanged. The finished appearance still benefits from a live two-browser visual check.
