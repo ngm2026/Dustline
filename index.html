@@ -15,6 +15,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 #reticle{position:fixed;left:50%;top:50%;width:29px;height:29px;transform:translate(-50%,-50%);z-index:5;pointer-events:none;display:none;filter:drop-shadow(0 1px 2px #0009)}
 #reticle .bar{position:absolute;background:white;box-shadow:0 0 2px #06101955;border-radius:1px}#reticle .up{width:3px;height:8px;left:13px;top:0}#reticle .down{width:3px;height:8px;left:13px;bottom:0}#reticle .left{height:3px;width:8px;left:0;top:13px}#reticle .right{height:3px;width:8px;right:0;top:13px}#reticle.aim .up{height:14px;top:0}#reticle.aim .down{height:14px;bottom:0}#reticle.aim .left{width:14px;left:0}#reticle.aim .right{width:14px;right:0}
 #weaponView{position:absolute;z-index:3;pointer-events:none;right:-1vw;bottom:-2vw;width:min(46vw,580px);height:min(40vw,490px);background-repeat:no-repeat;background-size:contain;background-position:right bottom;transform-origin:78% 82%;display:none;filter:drop-shadow(0 15px 12px #0b182b77)}
+#gunCanvas{display:block;height:100%;width:auto;max-width:100%;margin-left:auto}
 #flash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:85px;height:85px;pointer-events:none;z-index:3;opacity:0;background:radial-gradient(circle,#fff4 0%,#f5e0a8aa 14%,#ffb64f44 30%,transparent 70%);border-radius:50%}
 #hitmark{position:absolute;left:50%;top:50%;color:#f5f0d8;font-size:28px;font-weight:1000;text-shadow:0 2px 6px black;transform:translate(-50%,-50%);z-index:6;opacity:0;pointer-events:none}
 #message{position:absolute;top:17%;left:50%;transform:translateX(-50%);color:white;font-weight:900;letter-spacing:.14em;text-shadow:0 2px 12px #062437;opacity:0;transition:opacity .2s;z-index:6;font-size:13px;pointer-events:none;text-align:center;max-width:80vw}
@@ -61,7 +62,7 @@ button{font:inherit;cursor:pointer}#stage{position:fixed;inset:0;background:#8ab
 </head>
 <body>
 <div id="stage"></div><div id="vignette"></div><div id="damage"></div>
-<div id="weaponView"></div><div id="flash"></div>
+<div id="weaponView"><canvas id="gunCanvas" width="480" height="567" aria-hidden="true"></canvas></div><div id="flash"></div>
 <div id="reticle"><i class="bar up"></i><i class="bar down"></i><i class="bar left"></i><i class="bar right"></i></div><div id="hitmark">×</div><div id="message"></div>
 <div id="hud"><div id="topbar"><div><div class="brand">DUST<span>LINE</span> <small>ARENA SHOOTER</small></div><div class="micro" id="assetBadge">ARENA • READY</div></div><div><span class="stat"><b id="kills">0 / 5</b><small id="killsLabel">BOTS ELIMINATED</small></span><span class="stat"><b id="clock">00:00</b><small>MISSION TIME</small></span></div></div><div id="pvpHud">1V1 • YOU 0 – 0 OPPONENT • FIRST TO 3</div><div id="bottom"><div class="metric"><div class="n" id="hp">100</div><label>HEALTH</label></div><div class="metric" id="weaponHud"><div class="n"><span id="ammo">15</span><strong id="reserve"> / 75</strong></div><label id="gunName">HANDGUN</label></div></div><div id="tips"><span id="godIndicator">∞ INFINITE HEALTH (P TO TOGGLE)</span><span id="aiFrozenIndicator"> ❄ AI FROZEN (O TO UNFREEZE)</span></div></div>
 <div id="overlay"><div class="panel" id="menuPanel"><h1>DUST<span>LINE.</span></h1><div class="eyebrow">SELECT DIFFICULTY</div><div class="diffrow"><button data-level="easy">EASY</button><button data-level="normal" class="active">NORMAL</button><button data-level="hard">HARD</button></div><div id="statusWrap"><div id="status" role="status">Preparing the arena…</div><button type="button" id="statusClose" aria-label="Dismiss ready message" title="Dismiss" hidden>×</button></div><button class="primary" id="play" data-menu-hint="Take on 5 armed opponents in a timed battle." disabled>LOADING MODELS...</button><button class="secondary" id="createLobbyButton" data-menu-hint="Create an arena to battle your friends." disabled>CREATE LOBBY</button><button class="secondary" id="joinLobbyButton" data-menu-hint="Join an arena to battle your friends." disabled>JOIN LOBBY</button><button class="secondary" id="openSettingsMenu" data-menu-hint="Calibrate before the showdown.">SETTINGS ⚙</button><div id="menuHoverHint" class="menu-hover-hint" aria-live="polite"></div></div><div class="panel" id="createLobbyPanel" style="display:none">
@@ -755,7 +756,7 @@ function botUpdate(b,dt){
  }
 }
 function shoot(){if(mood!=='playing'||reloadEnd>elapsed)return;let w=weapon;if(elapsed<nextShot)return;if(w.mag<=0){reload();return}
- nextShot=elapsed+w.rate;w.mag--;recoil=1;flash=1;updateHUD();if(w.mag===0)say('PRESS R TO RELOAD',1.1);
+ nextShot=elapsed+w.rate;w.mag--;recoil=1;flash=1;startGunShotAnimation();updateHUD();if(w.mag===0)say('PRESS R TO RELOAD',1.1);
  camera.updateMatrixWorld();const forward=new THREE.Vector3();camera.getWorldDirection(forward);const spread=w.spread*(1-.75*aimAmount);forward.add(new THREE.Vector3(rnd(-spread,spread),rnd(-spread,spread),rnd(-spread,spread))).normalize();ray.set(camera.position,forward);ray.far=85;
  if(matchMode==='pvp'){
  const target=pvp.remote;
@@ -1169,7 +1170,7 @@ $('hostStartMatch').onclick=()=>{
  pvpStart();
 };
 
-function render(dt){renderer.render(scene,camera);if(mood==='playing'){$('flash').style.opacity=flash*.75;const gunEl=$('weaponView');let k=recoil*recoil;gunEl.style.transform=`translate(${k*9+rnd(-1,1)*k*2}px,${-k*32}px) rotate(${k*7}deg)`;$('damage').style.opacity=damageAlpha*.58}}
+function render(dt){renderer.render(scene,camera);if(mood==='playing'){updateGunShotAnimation();$('flash').style.opacity=flash*.75;$('damage').style.opacity=damageAlpha*.58}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.06,(t-lastFrame)/1000||.016);lastFrame=t;if(!renderer)return;
  if(mood==='playing'){elapsed+=dt;updateReload();let aiming=rightHeld;aimAmount+=(Number(aiming)-aimAmount)*Math.min(1,dt*10);camera.fov=baseFov*(1-.40*aimAmount);camera.updateProjectionMatrix();$('reticle').classList.toggle('aim',aimAmount>.42);
  // Turn first, then move along the camera's horizontal facing direction.
@@ -1249,7 +1250,45 @@ for(const id of ['play','createLobbyButton','joinLobbyButton','openSettingsMenu'
  button.addEventListener('blur',()=>{menuHint.textContent='';menuHint.classList.remove('visible')});
 }
 $('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='playing';setPanel(null);requestGameMouse()};$('back').onclick=menu;$('endBack').onclick=menu;
-$('weaponView').style.backgroundImage='url("assets/handgun.png")';
+// User-rendered 20-frame Blender pistol animation. A static sprite sheet lets
+// DUSTLINE freeze exactly on frame 1 while idle, then play/restart on a shot.
+// This only replaces the player's 2D gun HUD; opponent 3D pistol GLBs stay.
+const gunCanvas=$('gunCanvas'),gunContext=gunCanvas.getContext('2d');
+const gunSheet=new Image();
+const GUN_COLS=5,GUN_FRAME_W=480,GUN_FRAME_H=567;
+const GUN_FRAME_COUNT=20,GUN_FRAME_SECONDS=.05;
+let gunSheetReady=false,gunLastFrame=-1,gunShotStartedAt=-100;
+function drawGunFrame(frame){
+ if(!gunSheetReady||!gunContext||gunLastFrame===frame)return;
+ gunLastFrame=frame;
+ gunContext.clearRect(0,0,GUN_FRAME_W,GUN_FRAME_H);
+ gunContext.drawImage(gunSheet,
+   (frame%GUN_COLS)*GUN_FRAME_W,Math.floor(frame/GUN_COLS)*GUN_FRAME_H,
+   GUN_FRAME_W,GUN_FRAME_H,0,0,GUN_FRAME_W,GUN_FRAME_H);
+}
+function startGunShotAnimation(){
+ gunShotStartedAt=elapsed;
+ gunLastFrame=-1;
+ drawGunFrame(0);
+}
+function updateGunShotAnimation(){
+ const seconds=elapsed-gunShotStartedAt;
+ const frame=seconds>=0&&seconds<GUN_FRAME_COUNT*GUN_FRAME_SECONDS
+   ?Math.min(GUN_FRAME_COUNT-1,Math.floor(seconds/GUN_FRAME_SECONDS))
+   :0;
+ drawGunFrame(frame);
+}
+gunSheet.onload=()=>{
+ gunSheetReady=true;gunLastFrame=-1;
+ drawGunFrame(0); // Keep the first Blender frame visible while idle.
+};
+gunSheet.onerror=()=>{
+ // If the new asset fails to load, do not leave the player's hands empty.
+ gunCanvas.style.display='none';
+ $('weaponView').style.backgroundImage='url("assets/handgun.png")';
+ console.warn('DUSTLINE: Blender gun animation unavailable; showing fallback gun image');
+};
+gunSheet.src='assets/gun_shoot_sheet.webp';
 $('statusClose').addEventListener('click',()=>{$('statusWrap').hidden=true});
 function showReadyStatus(message='READY TO PLAY'){
  $('statusWrap').hidden=false;
