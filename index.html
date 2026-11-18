@@ -1256,7 +1256,7 @@ $('play').onclick=start;$('again').onclick=start;$('resume').onclick=()=>{mood='
 const gunCanvas=$('gunCanvas'),gunContext=gunCanvas.getContext('2d');
 const gunSheet=new Image();
 const GUN_COLS=5,GUN_FRAME_W=480,GUN_FRAME_H=567;
-const GUN_FRAME_COUNT=20,GUN_FRAME_SECONDS=.05;
+const GUN_FRAME_COUNT=20,GUN_FRAME_SECONDS=.025;
 let gunSheetReady=false,gunLastFrame=-1,gunShotStartedAt=-100;
 function drawGunFrame(frame){
  if(!gunSheetReady||!gunContext||gunLastFrame===frame)return;
