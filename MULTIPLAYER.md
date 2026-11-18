@@ -69,3 +69,7 @@ MoCap Online is thanked in DUSTLINE's **Settings → Thank You / Credits** scree
 ## Always-armed PvP opponents and shot recoil
 
 During multiplayer 1v1, the remote opponent **always holds their pistol up**. Their base upper-body/hand pose is the ready-to-fire **first frame of the actual Shooting_Animation.fbx**, not the Drawing_Gun_Animation.fbx sequence. There is no multiplayer draw or holster transition. The existing hand-mounted GLB remains visible during walking, idle, stationary turns, and jumps. When the player fires, the full firing clip blends over the held-gun pose for recoil and smoothly returns to the same ready position. Five-bot single-player animation behavior is unchanged. The finished appearance still benefits from a live two-browser visual check.
+
+## Pistol attachment — no frame-by-frame stutter
+
+The textured GLB pistol is now **parented to the Mixamo right-hand bone** using Three.js `Object3D.attach`, rather than following through world-space position/quaternion assignments every render tick. The pistol's original grip alignment, orientation, and world scale are calibrated once at character creation, after the PvP avatar is placed and facing its initial direction. The joint hierarchy carries the gun during walking, stationary turns, jumps, and shot recoil. The same attachment and safe cleanup also apply to the solo bot models. This is an animation hierarchy fix; a live two-browser check is still advised to verify the final visual alignment.
